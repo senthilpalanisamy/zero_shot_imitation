@@ -1,0 +1,142 @@
+#!/usr/bin/env python
+"""
+Set up configuration for hardware testing and moves arm to 'start' position
+
+inspired by `ik_pick_and_place_demo.py` -- Baxter RSDK Inverse Kinematics Pick and Place Demo by Rethink Robotics
+
++ Uses `baxter_interface` to verify that the robot is enabled
++ Uses `limb_interface` to control each arm with move_to_joint_positions
++ Uses `gripper_interface` to calibrate the gripper
+"""
+
+import argparse
+import struct
+import sys
+
+import rospy
+import rospkg
+import numpy as np
+
+from geometry_msgs.msg import (
+    PoseStamped,
+    Pose,
+)
+
+from baxter_interface.camera import CameraController
+import baxter_interface
+
+
+class setup_arm(object):
+    def __init__(self, limb, verbose=True):
+        self._limb_name = limb # string
+        self._verbose = verbose # bool
+        self._limb = baxter_interface.Limb(limb)
+        self._gripper = baxter_interface.Gripper(limb)
+        # verify robot is enabled
+        print("Getting robot state... ")
+        self._rs = baxter_interface.RobotEnable(baxter_interface.CHECK_VERSION)
+        self._rs.enable() # we think this enables the robot
+        self._init_state = self._rs.state().enabled
+        print("Enabling robot... ")
+        # calibrate gripper
+        self._gripper.calibrate(block=True)
+        self._gripper.set_dead_band(1.0)
+
+    def move_to_start(self, start_angles=None):
+        print("Moving the {0} arm to next pose...".format(self._limb_name))
+        if not start_angles:
+            start_angles = dict(zip(self._joint_names, [0]*7))
+        self._guarded_move_to_joint_position(start_angles)
+        self.gripper_open()
+        rospy.sleep(1.0)
+
+    def _guarded_move_to_joint_position(self, joint_angles):
+        if joint_angles:
+            self._limb.move_to_joint_positions(joint_angles)
+        else:
+            rospy.logerr("No Joint Angles provided for move_to_joint_positions. Staying put.")
+
+    def gripper_open(self):
+        self._gripper.open()
+        rospy.sleep(1.0)
+
+    def gripper_close(self):
+        self._gripper.close()
+        rospy.sleep(1.0)
+
+
+
+def open_cam(camera, resolution):
+  is_resolution_valid = any((resolution[0] == r[0] and resolution[1] == r[1]) for r in CameraController.MODES)
+
+  if not is_resolution_valid: 
+    rospy.logerr("Invalid resolution provided.")
+    # Open camera
+  cam = CameraController(camera) # Create camera object
+  cam.resolution = resolution # Set resolution
+  cam.open() # open
+
+def close_cam(camera):
+  cam = CameraController(camera) # Create camera object
+  cam.close() # close
+
+def main():
+    rospy.init_node("test_hw")
+
+    # Safe Joint Joint angles for left arm
+    safe_joint_angles_left = {'left_w0': 0.74,
+                              'left_w1': 0.82,
+                              'left_w2': -0.43,
+                              'left_e0': -0.91,
+                              'left_e1': 1.77,
+                              'left_s0': 1.07,
+                              'left_s1': -0.7}
+
+    # Safe Joint angles for right arm
+    safe_joint_angles_right = {'right_w0': 0.74,
+                                'right_w1': 0.82,
+                                'right_w2': -0.43,
+                                'right_e0': -0.91,
+                                'right_e1': 1.77,
+                                'right_s0': .07,
+                                'right_s1': -0.7}
+
+    # Starting Joint angles for left arm
+    starting_joint_angles_left = {'left_w0': 0.67,
+                                  'left_w1': 1.03,
+                                  'left_w2': -0.5,
+                                  'left_e0': -1.19,
+                                  'left_e1': 1.94,
+                                  'left_s0': .45, # .2, #-0.08,
+                                  'left_s1': -1.}
+    
+    # Starting Joint angles for right arm
+    #starting_joint_angles_right = {'right_w0': 0.07, #-0.12,#2.71, #2.74,  #0.85,
+    #                               'right_w1': 1.25, #1.25, #-0.77, #-1.09,  #1.52,
+    #                               'right_w2': 0.52, #0.61, #-2.33, #-2.71,   #0.05,
+    #                               'right_e0': -.04, #0.10, #0.39, #0.36,   #-0.99,
+    #                               'right_e1': 1.00, #0.86, #1.75, #0.97,   #0.80,
+    #                               'right_s0': 1.38, #1.37, #0.95, #0.95,   #1.46,
+    #                               'right_s1': -0.60}#-0.54}#-0.93} #-0.5}  #-0.46}
+    stp_left = setup_arm('left')  
+    stp_right = setup_arm('right')
+
+    # Move arm to "safe" angles (above table)
+    stp_left.move_to_start(safe_joint_angles_left)
+    stp_right.move_to_start(safe_joint_angles_right)
+
+    # Move to the desired starting angles (over workspace)
+    stp_left.move_to_start(starting_joint_angles_left)
+    stp_right.move_to_start(safe_joint_angles_right)
+
+    # set up cameras
+    close_cam('left_hand_camera')
+    close_cam('right_hand_camera')
+    close_cam('head_camera')
+    open_cam('right_hand_camera',(1280,800))
+    
+    print("Ready!")
+    rospy.spin()
+
+if __name__ == '__main__':
+    sys.exit(main())

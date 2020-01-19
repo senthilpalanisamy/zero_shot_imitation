@@ -1,0 +1,123 @@
+#!/usr/bin/env python
+"""
+Moves gripper to random manually input positions for testing
+
++ Uses `baxter_interface` to verify that the robot is enabled
++ Uses `limb_interface` to control each arm with move_to_joint_positions
++ Uses `gripper_interface` to calibrate the gripper
+
+"""
+
+import sys
+import copy
+import rospy
+import numpy as np
+import tf
+
+import moveit_commander
+import moveit_msgs.msg
+from geometry_msgs.msg import Pose
+from std_msgs.msg import String
+from moveit_commander.conversions import pose_to_list
+
+import baxter_interface
+
+class BaxterActionExectuor(object):
+    def __init__(self):
+        # initialize moveit commander
+        moveit_commander.roscpp_initialize(sys.argv)
+        robot = moveit_commander.RobotCommander()
+        scene = moveit_commander.PlanningSceneInterface()
+        group_name = 'left_arm'
+        self.group = moveit_commander.MoveGroupCommander(group_name)
+        display_trajectory_publisher = rospy.Publisher('/move_group/display_planned_path',
+                                               moveit_msgs.msg.DisplayTrajectory,
+                                               queue_size=20)
+        self.start_poke_pose = Pose()
+        self.end_poke_pose = Pose()
+
+        # print basic info for debugging
+        # We can get the name of the reference frame for this robot:
+        planning_frame = self.group.get_planning_frame()
+        print "============ Reference frame: %s" % planning_frame
+
+        # We can also print the name of the end-effector link for this group:
+        eef_link = self.group.get_end_effector_link()
+        print "============ End effector: %s" % eef_link
+
+        # We can get a list of all the groups in the robot:
+        group_names = robot.get_group_names()
+        print "============ Robot Groups:", robot.get_group_names()
+
+        # Sometimes for debugging it is useful to print the entire state of the
+        # robot:
+        print "============ Printing robot state"
+        print robot.get_current_state()
+        print ""
+
+
+    def execute_next_action(self):
+
+      for goal_pose in [self.start_poke_pose, self.end_poke_pose]:
+
+            self.group.set_pose_target(goal_pose)
+
+            # compute and execute plan
+            self.plan = self.group.go(wait=True)
+            # Calling `stop()` ensures that there is no residual movement
+            self.group.stop()
+            # It is always good to clear your targets after planning with poses.
+            # Note: there is no equivalent function for clear_joint_value_targets()
+            self.group.clear_pose_targets()
+
+    def convert_pixel_to_3D_coordinates(self, x, y):
+        return [x, y, 0.02]
+
+    def calculate_end_poke_pose(self, X, Y, theta, length):
+      end_x = X + length * np.cos(theta)
+      end_y = Y + length * np.sin(theta)
+      return [end_x, end_y]
+      
+
+    def update_next_action(self, x, y, theta, length):
+        # goals match l_gripper_l_finger_tip under links in RVIZ
+        X1, Y1 ,Z = self.convert_pixel_to_3D_coordinates(x, y)
+        X2, Y2 = self.calculate_end_poke_pose(X1, Y1, theta, length)
+        #rot_qter = tf.transformations.quaternion_from_euler(0, 0, theta) 
+        # rot_qter = tf.transformations.quaternion_from_euler(3.1396351, 0.0562722, -2.858592) 
+
+        rot_qter = tf.transformations.quaternion_from_euler(3.14 , 0, theta) 
+        self.start_poke_pose.position.x = X1
+        self.start_poke_pose.position.y = Y1
+        self.start_poke_pose.position.z = Z
+        self.start_poke_pose.orientation.x = rot_qter[0]
+        self.start_poke_pose.orientation.y = rot_qter[1]
+        self.start_poke_pose.orientation.z = rot_qter[2]
+        self.start_poke_pose.orientation.w = rot_qter[3]
+
+        # self.start_poke_pose.position.x = 0.639
+        # self.start_poke_pose.position.y = -0.025
+        # self.start_poke_pose.position.z = -0.007
+        # self.start_poke_pose.orientation.x = 0.141
+        # self.start_poke_pose.orientation.y = 0.989
+        # self.start_poke_pose.orientation.z = 0.0029
+        # self.start_poke_pose.orientation.w = 0.027
+
+        self.end_poke_pose.position.x = X2
+        self.end_poke_pose.position.y = Y2
+        self.end_poke_pose.position.z = Z 
+        self.end_poke_pose.orientation.x = rot_qter[0]
+        self.end_poke_pose.orientation.y = rot_qter[1] 
+        self.end_poke_pose.orientation.z = rot_qter[2]
+        self.end_poke_pose.orientation.w = rot_qter[3]
+
+
+if __name__ == '__main__':
+    try: 
+        rospy.init_node('poke_object',anonymous=True)
+        object_poker = BaxterActionExectuor()
+        object_poker.update_next_action(0.7988, 0.1759, 0.78, 0.1)
+        object_poker.execute_next_action()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
