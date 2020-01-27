@@ -22,19 +22,30 @@ class Net(nn.Module):
     self.conv4 = nn.Conv2d(384, 256, 3)
     # self.fc1 = nn.Linear(self._to_linear, 100)
     self.conv5 = nn.Conv2d(256, 256, 3)
+    self.conv6 = nn.Conv2d(256, 200, 3)
     #self.fc1 = nn.Linear(self._to_linear, 100)
-    self.fc2 = nn.Linear(100, 2)
+    self.fc2 = nn.Linear(200, 40)
 
 
-  def forward(self, x):
-    x = F.max_pool2d(F.relu(self.conv1(x)), (3,3))
-    x = F.max_pool2d(F.relu(self.conv2(x)), (3,3))
-    x = F.max_pool2d(F.relu(self.conv3(x)), (3,3))
-    x = F.max_pool2d(F.relu(self.conv4(x)), (3,3))
-    x = F.max_pool2d(F.relu(self.conv5(x)), (3,3))
+  def forward(self, image_pair):
+    latent_features = []
+    for image in image_pair:
+      x = F.max_pool2d(F.relu(self.conv1(image)), (3,3))
+      x = F.max_pool2d(F.relu(self.conv2(x)), (3,3))
+      x = F.max_pool2d(F.relu(self.conv3(x)), (3,3))
+      x = F.max_pool2d(F.relu(self.conv4(x)), (3,3))
+      x = F.max_pool2d(F.relu(self.conv5(x)), (3,3))
+      x = F.max_pool2d(F.relu(self.conv6(x)), (3,3))
+      latent_features.append(x)
+
     if self._to_linear is None:
         self._to_linear = x[0].shape[0] * x[0].shape[1] * x[0].shape[2]
-        self.fc1 = nn.Linear(self._to_linear, 100)
+        self.fc1 = nn.Linear(self._to_linear * 2, 200)
+    
+    N = latent_features[0].shape[0]
+    flatten_input1 = latent_features[0].reshape(N, -1)
+    flatten_input2 = latent_features[1].reshape(N, -1)
+    x = torch.concat((flatten_input1, flatten_input2), 0) 
     x = self.fc1(x.view(-1, self._to_linear))
     x = self.fc2(x)
     return F.softmax(x, dim=1)
