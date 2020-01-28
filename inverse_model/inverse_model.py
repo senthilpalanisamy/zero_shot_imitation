@@ -30,22 +30,23 @@ class Net(nn.Module):
   def forward(self, image_pair):
     latent_features = []
     for image in image_pair:
-      x = F.max_pool2d(F.relu(self.conv1(image)), (3,3))
-      x = F.max_pool2d(F.relu(self.conv2(x)), (3,3))
-      x = F.max_pool2d(F.relu(self.conv3(x)), (3,3))
-      x = F.max_pool2d(F.relu(self.conv4(x)), (3,3))
-      x = F.max_pool2d(F.relu(self.conv5(x)), (3,3))
-      x = F.max_pool2d(F.relu(self.conv6(x)), (3,3))
+      x = F.relu(self.conv1(image))
+      x = F.relu(self.conv2(x))
+      x = F.relu(self.conv3(x))
+      x = F.relu(self.conv4(x))
+      x = F.relu(self.conv5(x))
+      x = F.relu(self.conv6(x))
       latent_features.append(x)
 
     if self._to_linear is None:
         self._to_linear = x[0].shape[0] * x[0].shape[1] * x[0].shape[2]
-        self.fc1 = nn.Linear(self._to_linear * 2, 200)
+        self._to_linear = self._to_linear * 2
+        self.fc1 = nn.Linear(self._to_linear, 200)
     
     N = latent_features[0].shape[0]
     flatten_input1 = latent_features[0].reshape(N, -1)
     flatten_input2 = latent_features[1].reshape(N, -1)
-    x = torch.concat((flatten_input1, flatten_input2), 0) 
+    x = torch.cat((flatten_input1, flatten_input2), 1) 
     x = self.fc1(x.view(-1, self._to_linear))
     x = self.fc2(x)
     return F.softmax(x, dim=1)
@@ -69,14 +70,17 @@ class Net(nn.Module):
     
 if __name__=='__main__':
   net = Net()
-  # net = net.double()
-  # image = torch.tensor(np.zeros((1, 3, 224, 224)))
-  # net.zero_grad()
-  # outputs = net(image.double())
   model_state = net.state_dict()
   alexnet = models.alexnet()
   alexnet_state = alexnet.state_dict()
   net.tranfer_weigths_from(alexnet_state)
+
+  net = net.double()
+  image1 = torch.tensor(np.zeros((1, 3, 224, 224)))
+  image2 = torch.tensor(np.zeros((1, 3, 224, 224)))
+  joint_image = [image1.double(), image2.double()]
+  net.zero_grad()
+  outputs = net(joint_image)
   print('finished')
 
 
