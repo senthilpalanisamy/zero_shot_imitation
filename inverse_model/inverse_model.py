@@ -1,4 +1,5 @@
 import os
+
 import cv2
 import numpy as np
 from tqdm import tqdm
@@ -9,6 +10,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import models
 from torchsummary import summary
+
+from dataset_reader import BaxterPokingDataReader
 
 
 class Net(nn.Module):
@@ -25,6 +28,11 @@ class Net(nn.Module):
     self.conv6 = nn.Conv2d(256, 200, 3)
     #self.fc1 = nn.Linear(self._to_linear, 100)
     self.fc2 = nn.Linear(200, 40)
+    self.EPOCHS = 100
+    self.BATCH_SIZE = 8
+    self._IMAGE_WIDTH = 224
+    self._IMAGE_COL = 224
+
 
 
   def forward(self, image_pair):
@@ -51,7 +59,10 @@ class Net(nn.Module):
     x = self.fc2(x)
     return F.softmax(x, dim=1)
   
-  def tranfer_weigths_from(self, transfer_model_state):
+  def transfer_weigths_from_alexnet(self):
+
+    alexnet = models.alexnet()
+    transfer_model_state = alexnet.state_dict()
     similar_layer_names = [['conv1.weight', 'features.0.weight'],
                            ['conv1.bias', 'features.0.bias'],     
                            ['conv2.weight', 'features.3.weight'],
@@ -67,20 +78,75 @@ class Net(nn.Module):
       model_state[my_layer_name] = transfer_model_state[transfer_layer_name]
       print(my_layer_name, model_state[my_layer_name].shape == transfer_model_state[transfer_layer_name].shape)
     self.load_state_dict(model_state)
+
+class networkTrainer:
+  def __init__(self, dataset, EPOCHS=3, BATCH_SIZE=8):
+    self.__net = Net()
+    self.__net = self.__net.transfer_weigths_from_alexnet()
+    self.__dataset = dataset
+    self.__IMG_HEIGHT = dataset[0][0].shape[2]
+    self.__IMG_WIDTH = dataset[0][0].shape[3]
+    self.__NO_OF_CHANNELS = dataset[0][0].shape[1]
+    self.__VAL_PERCENTAGE = 0.1
+    self.__TEST_PERCENTAGE = 0.1
+    self.EPOCHS = EPOCHS
+    self.BATCH_SIZE = BATCH_SIZE
+    self.__partition_dataset()
+
+
+  def train_network(self, train_data):
+  
+
+    optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
+    loss_function = nn.MSELoss()
+
+    for epoch in range(self._EPOCHS):
+      for i in tqdm(range(0, len(self._train_x), self._BATCH_SIZE)):
+        batch_x = train_x[i:i+BATCH_SIZE].view(-1, 2, self.__NO_OF_CHANNELS , 
+                                              self.__IMG_HEIGHT, self.__IMG_WIDTH)
+        batch_y = train_y[i:i+BATCH_SIZE]
+        self.__net.zero_grad()
+        outputs = self.__net(batch_x)
+        loss = loss_function(outputs, batch_y)
+        loss.backward()
+        optimizer.step()
+
+  def __partition_dataset(self):
+
+    # 2 because this is a simese type network
+    X = torch.Tensor([i[0] for i in self.__dataset]).view(-1, 2, self.__NO_OF_CHANNELS , 
+                                                         self.__IMG_HEIGHT, self.__IMG_WIDTH)
+    X = X / 255.0
+    # Only x is predicted as of now
+    Y = torch.Tensor([i[1][0] for i in self.__dataset])
+
+    val_size = int(len(X) * self.__VAL_PERCENTAGE)
+    print(val_size)
+
+    test_size = int(len(X) * self.__TEST_PERCENTAGE)
+
+    self._train_x = X[:-val_size-test_size]
+    self._train_y = y[:-val_size-test_size]
+    self._val_x = X[-val_size:]
+    self._val_y = X[-val_size:]
+    self._test_x = X[-val_size - test_size:-val_size]
+    self._test_y = X[-val_size - test_size:-val_size] 
+
     
 if __name__=='__main__':
-  net = Net()
-  model_state = net.state_dict()
-  alexnet = models.alexnet()
-  alexnet_state = alexnet.state_dict()
-  net.tranfer_weigths_from(alexnet_state)
+  dataset_path = '/home/senthilpalanisamy/work/winter_project/my_code/data/mini_data'
+  poking_data = BaxterPokingDataReader(dataset_path)
+  poking_data.read_and_process_data()
+  dl_trainer = networkTrainer(poking_data.total_data[:100])
+  #model_state = net.state_dict()
+  #net.tranfer_weigths_from(alexnet_state)
 
-  net = net.double()
-  image1 = torch.tensor(np.zeros((1, 3, 224, 224)))
-  image2 = torch.tensor(np.zeros((1, 3, 224, 224)))
-  joint_image = [image1.double(), image2.double()]
-  net.zero_grad()
-  outputs = net(joint_image)
-  print('finished')
+  # net = net.double()
+  # image1 = torch.tensor(np.zeros((1, 3, 224, 224)))
+  # image2 = torch.tensor(np.zeros((1, 3, 224, 224)))
+  # joint_image = [image1.double(), image2.double()]
+  # net.zero_grad()
+  # outputs = net(joint_image)
+  # print('finished')
 
 
