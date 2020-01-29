@@ -8,10 +8,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision
 from torchvision import models
 from torchsummary import summary
+from torch.utils.tensorboard import SummaryWriter
 
 from dataset_reader import BaxterPokingDataReader
+torch.cuda.set_device(3)
 
 
 class Net(nn.Module):
@@ -82,8 +85,11 @@ class Net(nn.Module):
 
 class networkTrainer:
   def __init__(self, dataset, EPOCHS=3, BATCH_SIZE=8):
+    self.__device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.__net = Net()
     self.__net.transfer_weigths_from_alexnet()
+    # self.__net.to(self.__device)
+    self.__net = self.__net.cuda()
     self.__dataset = dataset
     self.__IMG_HEIGHT = dataset[0][0].shape[2]
     self.__IMG_WIDTH = dataset[0][0].shape[3]
@@ -93,6 +99,8 @@ class networkTrainer:
     self.EPOCHS = EPOCHS
     self.BATCH_SIZE = BATCH_SIZE
     self.__partition_dataset()
+    self.__writer = SummaryWriter()
+
 
 
   def train_network(self):
@@ -101,26 +109,45 @@ class networkTrainer:
     optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
     loss_function = nn.MSELoss()
 
+    # For visualisation
+    images = self.__train_x[0,0,:,:,:].reshape(self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+    # create grid of images
+    img_grid = torchvision.utils.make_grid(images * 255)
+    self.__writer.add_image('baxter_poking_image', img_grid)
+    # TODO: Find how model with weights can be visualised
+    # self.__writer.add_graph(self.__net, self.__train_x[0,:,:,:,:])
+
+
+
+
     for epoch in range(self.EPOCHS):
       for i in tqdm(range(0, self.__train_x.shape[0], self.BATCH_SIZE)):
-        # batch_x = self.__train_x[i:i+BATCH_SIZE].view(-1, 2, self.__NO_OF_CHANNELS , 
-        #                                       self.__IMG_HEIGHT, self.__IMG_WIDTH)
         batch_x = self.__train_x[i:i+self.BATCH_SIZE]
         batch_y = self.__train_y[i:i+self.BATCH_SIZE]
         self.__net.zero_grad()
         outputs = self.__net(batch_x)
         loss = loss_function(outputs, batch_y)
+        print(loss)
         loss.backward()
         optimizer.step()
+
+        # log data for tensorboard
+        # writer.add_scalar('Loss/train', np.random.random(), n_iter)
+        # writer.add_scalar('Loss/test', np.random.random(), n_iter)
+        # writer.add_scalar('Accuracy/train', np.random.random(), n_iter)
+        # writer.add_scalar('Accuracy/test', np.random.random(), n_iter)
+
+    # self.__writer.close()
+
 
   def __partition_dataset(self):
 
     # 2 because this is a simese type network
     X = torch.Tensor([i[0] for i in self.__dataset]).view(-1, 2, self.__NO_OF_CHANNELS , 
-                                                         self.__IMG_HEIGHT, self.__IMG_WIDTH)
+                                                         self.__IMG_HEIGHT, self.__IMG_WIDTH).cuda()
     X = X / 255.0
     # Only x is predicted as of now
-    Y = torch.Tensor([i[1][0] for i in self.__dataset])
+    Y = torch.Tensor([i[1][0] for i in self.__dataset]).cuda()
 
     val_size = int(len(X) * self.__VAL_PERCENTAGE)
     print(val_size)
@@ -134,9 +161,10 @@ class networkTrainer:
     self.__test_x = X[-val_size - test_size:-val_size]
     self.__test_y = Y[-val_size - test_size:-val_size] 
 
+
     
 if __name__=='__main__':
-  dataset_path = '/home/senthilpalanisamy/work/winter_project/my_code/data/mini_data'
+  dataset_path = '../data/mini_data'
   poking_data = BaxterPokingDataReader(dataset_path)
   poking_data.read_and_process_data()
   dl_trainer = networkTrainer(poking_data.total_data[:100])
