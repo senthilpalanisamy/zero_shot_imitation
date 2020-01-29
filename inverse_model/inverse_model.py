@@ -27,7 +27,7 @@ class Net(nn.Module):
     self.conv5 = nn.Conv2d(256, 256, 3)
     self.conv6 = nn.Conv2d(256, 200, 3)
     #self.fc1 = nn.Linear(self._to_linear, 100)
-    self.fc2 = nn.Linear(200, 40)
+    self.fc2 = nn.Linear(200, 20)
     self.EPOCHS = 100
     self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
@@ -37,7 +37,8 @@ class Net(nn.Module):
 
   def forward(self, image_pair):
     latent_features = []
-    for image in image_pair:
+    for index in range(2):
+      image = image_pair[:, index, :, :, :]
       x = F.relu(self.conv1(image))
       x = F.relu(self.conv2(x))
       x = F.relu(self.conv3(x))
@@ -82,7 +83,7 @@ class Net(nn.Module):
 class networkTrainer:
   def __init__(self, dataset, EPOCHS=3, BATCH_SIZE=8):
     self.__net = Net()
-    self.__net = self.__net.transfer_weigths_from_alexnet()
+    self.__net.transfer_weigths_from_alexnet()
     self.__dataset = dataset
     self.__IMG_HEIGHT = dataset[0][0].shape[2]
     self.__IMG_WIDTH = dataset[0][0].shape[3]
@@ -94,17 +95,18 @@ class networkTrainer:
     self.__partition_dataset()
 
 
-  def train_network(self, train_data):
+  def train_network(self):
   
 
     optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
     loss_function = nn.MSELoss()
 
-    for epoch in range(self._EPOCHS):
-      for i in tqdm(range(0, len(self._train_x), self._BATCH_SIZE)):
-        batch_x = train_x[i:i+BATCH_SIZE].view(-1, 2, self.__NO_OF_CHANNELS , 
-                                              self.__IMG_HEIGHT, self.__IMG_WIDTH)
-        batch_y = train_y[i:i+BATCH_SIZE]
+    for epoch in range(self.EPOCHS):
+      for i in tqdm(range(0, self.__train_x.shape[0], self.BATCH_SIZE)):
+        # batch_x = self.__train_x[i:i+BATCH_SIZE].view(-1, 2, self.__NO_OF_CHANNELS , 
+        #                                       self.__IMG_HEIGHT, self.__IMG_WIDTH)
+        batch_x = self.__train_x[i:i+self.BATCH_SIZE]
+        batch_y = self.__train_y[i:i+self.BATCH_SIZE]
         self.__net.zero_grad()
         outputs = self.__net(batch_x)
         loss = loss_function(outputs, batch_y)
@@ -125,12 +127,12 @@ class networkTrainer:
 
     test_size = int(len(X) * self.__TEST_PERCENTAGE)
 
-    self._train_x = X[:-val_size-test_size]
-    self._train_y = y[:-val_size-test_size]
-    self._val_x = X[-val_size:]
-    self._val_y = X[-val_size:]
-    self._test_x = X[-val_size - test_size:-val_size]
-    self._test_y = X[-val_size - test_size:-val_size] 
+    self.__train_x = X[:-val_size-test_size]
+    self.__train_y = Y[:-val_size-test_size]
+    self.__val_x = X[-val_size:]
+    self.__val_y = Y[-val_size:]
+    self.__test_x = X[-val_size - test_size:-val_size]
+    self.__test_y = Y[-val_size - test_size:-val_size] 
 
     
 if __name__=='__main__':
@@ -138,6 +140,7 @@ if __name__=='__main__':
   poking_data = BaxterPokingDataReader(dataset_path)
   poking_data.read_and_process_data()
   dl_trainer = networkTrainer(poking_data.total_data[:100])
+  dl_trainer.train_network()
   #model_state = net.state_dict()
   #net.tranfer_weigths_from(alexnet_state)
 
