@@ -14,7 +14,6 @@ from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset_reader import BaxterPokingDataReader
-torch.cuda.set_device(3)
 
 
 class Net(nn.Module):
@@ -30,9 +29,15 @@ class Net(nn.Module):
     self.conv5 = nn.Conv2d(256, 256, 3, stride=1, padding=2)
     #self.conv6 = nn.Conv2d(256, 200, 3)
     self.conv6 = nn.Conv2d(256, 200, 3, stride=1, padding=2)
-    self.fc1 = nn.Linear(self.__to_linear, 200)
+    self.pre_xy_classifer = nn.Linear(self.__to_linear, 200)
     #self.fc1 = nn.Linear(19009600, 200) 
-    self.fc2 = nn.Linear(200, 20) 
+    # Action_classifier
+    self.xy_classifier = nn.Linear(200, XYBIN_COUNT) 
+    self.pre_angle_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT, 200)
+    self.angle_classifier = nn.Linear(200, ANGLE_BIN_COUNT)
+    self.pre_length_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT + ANGLE_BIN_COUNT,
+                                    200)
+    self.length_classifier = nn.Linear(200, LEN_ACTIONBIN_COUNT)
     self.EPOCHS = 100
     self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
@@ -62,9 +67,17 @@ class Net(nn.Module):
     flatten_input1 = latent_features[0].reshape(N, -1)
     flatten_input2 = latent_features[1].reshape(N, -1)
     x = torch.cat((flatten_input1, flatten_input2), 1) 
-    x = self.fc1(x.view(-1, self.__to_linear))
-    x = self.fc2(x)
-    return F.softmax(x, dim=1)
+    latent_2images = self.pre_length_classifier(x.view(-1, self.__to_linear))
+    x = self.length_classifier(x)
+    op1 = F.softmax(x, dim=1)
+    angle_concat = torch.cat((latent_2images, op1), 1) 
+    x = self.pre_angle_classifier(angle_concat)
+    x = self.angle_classifier(x)
+    op2 = F.softmax(x, dim=1)
+    x = torch.cat(angle_concat, op2)
+    x = self.pre_length_classifier(x)
+    op3 = self.length_classifier(x)
+    return [op1, op2, op3]
   
   def transfer_weigths_from_alexnet(self):
 

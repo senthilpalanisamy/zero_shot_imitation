@@ -1,6 +1,7 @@
 import os
 import glob
 import math
+import config.py
 
 import numpy as np
 import scipy.ndimage
@@ -18,12 +19,11 @@ class BaxterPokingDataReader:
     self.total_data = []
     self.__image_width = -1
     self.__image_height = -1
-    self.__xbin_count = 20
-    self.__ybin_count = 20
-    self.__xybin_count = self.__xbin_count * self.__ybin_count
-    self.__total_loc_bins = self.__xbin_count * self.__ybin_count
-    self.__anglebin_count = 20
-    self.__len_actionbin_count = 16
+    self.__xbin_count = XBIN_COUNT
+    self.__ybin_count = YBIN_COUNT
+    self.__xybin_count = XYBIN_COUNT
+    self.__anglebin_count = ANGLE_BIN
+    self.__len_actionbin_count = LEN_ACTIONBIN_COUNT
     self.__class_counts = [self.__xbin_count, self.__ybin_count,
                            self.__xybin_count, self.__anglebin_count, 
                            self.__len_actionbin_count]
