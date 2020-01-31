@@ -78,6 +78,15 @@ class Net(nn.Module):
     x = self.pre_length_classifier(x)
     op3 = self.length_classifier(x)
     return [op1, op2, op3]
+
+  def inverse_loss(self, outputs, targets):
+    op1, op2, op3 = outputs
+    target1, target2, target3 = targets
+    criterion = nn.CrossEntropyLoss().cuda()
+    total_loss = criterion(op1, target1) + criterion(op2, target2) +\
+                 criterion(op3, target3)
+    return total_loss
+
   
   def transfer_weigths_from_alexnet(self):
 
@@ -146,7 +155,8 @@ class networkTrainer:
         batch_y = self.__train_y[i:i+self.BATCH_SIZE].to(self.__data_device)
         self.__net.zero_grad()
         outputs = self.__net(batch_x)
-        loss = loss_function(outputs, batch_y)
+        loss = self.__net.inverse_loss(outputs, batch_y)
+        #loss = loss_function(outputs, batch_y)
         print(loss)
         loss.backward()
         optimizer.step()
@@ -167,7 +177,7 @@ class networkTrainer:
                                                          self.__IMG_HEIGHT, self.__IMG_WIDTH).to(self.__data_device)
     X = X / 255.0
     # Only x is predicted as of now
-    Y = torch.Tensor([i[1][0] for i in self.__dataset]).to(self.__data_device)
+    Y = torch.Tensor([i[2][0:2] for i in self.__dataset]).to(self.__data_device)
 
     val_size = int(len(X) * self.__VAL_PERCENTAGE)
     print(val_size)

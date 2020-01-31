@@ -89,10 +89,8 @@ class BaxterPokingDataReader:
       gt_onehot_vectors=[]
       for index, gt_value in enumerate(groundtruth[:-1]):
         #Construct a one-hot vector for ground truth
-        # print(self.__class_counts[index])
         gt_onehot_vectors.append(np.eye(self.__class_counts[index])[gt_value])
-      #discretised_data.append([images, groundtruth.astype(np.int8)])
-      discretised_data.append([images, gt_onehot_vectors])
+      discretised_data.append([images, gt_onehot_vectors, groundtruth])
     self.total_data = discretised_data
 
   def read_and_process_data(self):
