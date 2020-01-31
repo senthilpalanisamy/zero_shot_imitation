@@ -14,6 +14,7 @@ from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset_reader import BaxterPokingDataReader
+from config import *
 
 
 class Net(nn.Module):
@@ -29,10 +30,10 @@ class Net(nn.Module):
     self.conv5 = nn.Conv2d(256, 256, 3, stride=1, padding=2)
     #self.conv6 = nn.Conv2d(256, 200, 3)
     self.conv6 = nn.Conv2d(256, 200, 3, stride=1, padding=2)
-    self.pre_xy_classifer = nn.Linear(self.__to_linear, 200)
+    self.pre_xy_classifier = nn.Linear(self.__to_linear, 1000)
     #self.fc1 = nn.Linear(19009600, 200) 
     # Action_classifier
-    self.xy_classifier = nn.Linear(200, XYBIN_COUNT) 
+    self.xy_classifier = nn.Linear(1000, XYBIN_COUNT) 
     self.pre_angle_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT, 200)
     self.angle_classifier = nn.Linear(200, ANGLE_BIN_COUNT)
     self.pre_length_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT + ANGLE_BIN_COUNT,
@@ -66,25 +67,25 @@ class Net(nn.Module):
     N = latent_features[0].shape[0]
     flatten_input1 = latent_features[0].reshape(N, -1)
     flatten_input2 = latent_features[1].reshape(N, -1)
-    x = torch.cat((flatten_input1, flatten_input2), 1) 
-    latent_2images = self.pre_length_classifier(x.view(-1, self.__to_linear))
-    x = self.length_classifier(x)
+    latent_2images = torch.cat((flatten_input1, flatten_input2), 1) 
+    x = self.pre_xy_classifier(latent_2images.view(-1, self.__to_linear))
+    x = self.xy_classifier(x)
     op1 = F.softmax(x, dim=1)
     angle_concat = torch.cat((latent_2images, op1), 1) 
     x = self.pre_angle_classifier(angle_concat)
     x = self.angle_classifier(x)
     op2 = F.softmax(x, dim=1)
-    x = torch.cat(angle_concat, op2)
+    x = torch.cat((angle_concat, op2), 1)
     x = self.pre_length_classifier(x)
     op3 = self.length_classifier(x)
     return [op1, op2, op3]
 
   def inverse_loss(self, outputs, targets):
     op1, op2, op3 = outputs
-    target1, target2, target3 = targets
+    target1, target2, target3 = targets[:,0], targets[:,1], targets[:,2]
     criterion = nn.CrossEntropyLoss().cuda()
-    total_loss = criterion(op1, target1) + criterion(op2, target2) +\
-                 criterion(op3, target3)
+    total_loss = criterion(op1, torch.LongTensor(target1)) + criterion(op2, torch.LongTensor(target2)) +\
+                 criterion(op3, torch.LongTensor(target3))
     return total_loss
 
   
@@ -136,7 +137,7 @@ class networkTrainer:
   
 
     optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
-    loss_function = nn.MSELoss()
+    #loss_function = nn.MSELoss()
 
     # For visualisation
     images = self.__train_x[0,0,:,:,:].reshape(self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
@@ -177,7 +178,7 @@ class networkTrainer:
                                                          self.__IMG_HEIGHT, self.__IMG_WIDTH).to(self.__data_device)
     X = X / 255.0
     # Only x is predicted as of now
-    Y = torch.Tensor([i[2][0:2] for i in self.__dataset]).to(self.__data_device)
+    Y = torch.Tensor([i[2][0:3] for i in self.__dataset]).to(self.__data_device)
 
     val_size = int(len(X) * self.__VAL_PERCENTAGE)
     print(val_size)

@@ -1,12 +1,13 @@
 import os
 import glob
 import math
-import config.py
 
 import numpy as np
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import cv2
+
+from config import *
 
 
 class BaxterPokingDataReader:
@@ -22,7 +23,7 @@ class BaxterPokingDataReader:
     self.__xbin_count = XBIN_COUNT
     self.__ybin_count = YBIN_COUNT
     self.__xybin_count = XYBIN_COUNT
-    self.__anglebin_count = ANGLE_BIN
+    self.__anglebin_count = ANGLE_BIN_COUNT
     self.__len_actionbin_count = LEN_ACTIONBIN_COUNT
     self.__class_counts = [self.__xbin_count, self.__ybin_count,
                            self.__xybin_count, self.__anglebin_count, 
@@ -85,8 +86,9 @@ class BaxterPokingDataReader:
 
       groundtruth[ANGLE] = round(groundtruth[ANGLE] / TOTAL_ANGLE * (self.__anglebin_count-1))
       groundtruth[ACTIONLEN] = round(groundtruth[ACTIONLEN] * 100)
-      groundtruth = groundtruth.astype(np.int8)
+      groundtruth = groundtruth.astype(np.int16)
       gt_onehot_vectors=[]
+      print(groundtruth)
       for index, gt_value in enumerate(groundtruth[:-1]):
         #Construct a one-hot vector for ground truth
         gt_onehot_vectors.append(np.eye(self.__class_counts[index])[gt_value])
