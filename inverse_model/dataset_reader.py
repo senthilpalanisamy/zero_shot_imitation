@@ -20,10 +20,13 @@ class BaxterPokingDataReader:
     self.__image_height = -1
     self.__xbin_count = 20
     self.__ybin_count = 20
+    self.__xybin_count = self.__xbin_count * self.__ybin_count
+    self.__total_loc_bins = self.__xbin_count * self.__ybin_count
     self.__anglebin_count = 20
     self.__len_actionbin_count = 16
     self.__class_counts = [self.__xbin_count, self.__ybin_count,
-                          self.__anglebin_count, self.__len_actionbin_count]
+                           self.__xybin_count, self.__anglebin_count, 
+                           self.__len_actionbin_count]
  
   def __load_data_from_directory(self):
     data_runs = os.listdir(self.__base_path)
@@ -32,6 +35,8 @@ class BaxterPokingDataReader:
       folder_path = os.path.join(self.__base_path, folder)
       gt_file_path = os.path.join(folder_path, 'actions.npy')
       ground_truth = np.load(gt_file_path)
+      N = len(ground_truth)
+      ground_truth = np.hstack((ground_truth[:,:2], np.ones((N,1))*-1, ground_truth[:, 2:]))
       image_names = os.listdir(folder_path)
       image_names = [file_name for file_name in image_names if file_name.endswith('.jpg')]
       previous_image = cv2.imread(os.path.join(folder_path, image_names[0]))
@@ -61,8 +66,10 @@ class BaxterPokingDataReader:
     discretised_data = []
     ACTION_COORD_X=0
     ACTION_COORD_Y=1
-    ANGLE=2
-    ACTIONLEN=3
+    XY_ACTIONBIN = 2
+
+    ANGLE=3
+    ACTIONLEN=4
     TOTAL_ANGLE = 2 * np.pi
     GT_TOTAL_NO = 4
     for data in self.total_data:
@@ -71,6 +78,11 @@ class BaxterPokingDataReader:
                                     * (self.__xbin_count-1))
       groundtruth[ACTION_COORD_Y] =  round(groundtruth[ACTION_COORD_Y] / self.__image_height
                                     * (self.__ybin_count-1))
+      groundtruth[XY_ACTIONBIN] = (groundtruth[ACTION_COORD_Y]+1) * self.__ybin_count +\
+                                  groundtruth[ACTION_COORD_X]
+                                  
+                                  
+
       groundtruth[ANGLE] = round(groundtruth[ANGLE] / TOTAL_ANGLE * (self.__anglebin_count-1))
       groundtruth[ACTIONLEN] = round(groundtruth[ACTIONLEN] * 100)
       groundtruth = groundtruth.astype(np.int8)
