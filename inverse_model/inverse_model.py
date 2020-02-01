@@ -83,9 +83,14 @@ class Net(nn.Module):
   def inverse_loss(self, outputs, targets):
     op1, op2, op3 = outputs
     target1, target2, target3 = targets[:,0], targets[:,1], targets[:,2]
+    #criterion = nn.CrossEntropyLoss()
     criterion = nn.CrossEntropyLoss().cuda()
-    total_loss = criterion(op1, torch.LongTensor(target1)) + criterion(op2, torch.LongTensor(target2)) +\
-                 criterion(op3, torch.LongTensor(target3))
+    # op = torch.LongTensor(target1)
+    #op1 = op1.to(torch.int64)
+    loss1 = criterion(op1.float(), target1.long()) 
+    loss2 = criterion(op2.float(), target2.long()) 
+    loss3 = criterion(op3.float(), target3.long()) 
+    total_loss = loss1 + loss2 + loss3             
     return total_loss
 
   
@@ -178,7 +183,8 @@ class networkTrainer:
                                                          self.__IMG_HEIGHT, self.__IMG_WIDTH).to(self.__data_device)
     X = X / 255.0
     # Only x is predicted as of now
-    Y = torch.Tensor([i[2][0:3] for i in self.__dataset]).to(self.__data_device)
+    # Think on how to handle this better
+    Y = torch.Tensor([i[2][2:6] for i in self.__dataset]).to(self.__data_device)
 
     val_size = int(len(X) * self.__VAL_PERCENTAGE)
     print(val_size)
