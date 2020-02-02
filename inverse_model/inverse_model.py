@@ -1,4 +1,5 @@
 import os
+import time
 
 import cv2
 import numpy as np
@@ -46,10 +47,11 @@ class Net(nn.Module):
 
 
 
-  def forward(self, image_pair):
+  def forward(self, image1, image2):
     latent_features = []
+    image_pair=[image1, image2]
     for index in range(2):
-      image = image_pair[:, index, :, :, :]
+      image = image_pair[index]
       x = F.max_pool2d(F.relu(self.conv1(image)), (3,3), stride=2)
       x = F.max_pool2d(F.relu(self.conv2(x)), (3, 3), stride=2)
       x = F.relu(self.conv3(x))
@@ -77,8 +79,10 @@ class Net(nn.Module):
     op2 = F.softmax(x, dim=1)
     x = torch.cat((angle_concat, op2), 1)
     x = self.pre_length_classifier(x)
-    op3 = self.length_classifier(x)
-    return [op1, op2, op3]
+    x = self.length_classifier(x)
+    op3 = F.softmax(x, dim=1)
+    #final_op = torch.cat((op1.unsqueeze(0), op2.unsqueeze(0), op3.unsqueeze(0)), 0)   
+    return (op1, op2, op3)
 
   def inverse_loss(self, outputs, targets):
     op1, op2, op3 = outputs
@@ -92,6 +96,29 @@ class Net(nn.Module):
     loss3 = criterion(op3.float(), target3.long()) 
     total_loss = loss1 + loss2 + loss3             
     return total_loss
+
+  def calculate_accuracy(self, data, labels):
+
+     img1 = data[:,0,:,:,:]
+     img2 = data[:,1,:,:,:]
+     outputs = self.forward(img1, img2)
+     self.zero_grad()
+     loss = self.inverse_loss(outputs, labels)
+     accuracies = []
+     classifier_accuracies = {}
+
+
+     for op_idx, op in enumerate(outputs):
+       op_labels = torch.argmax(op, axis=1)
+       success = sum([1 for data_idx in range(len(op_labels))\
+                      if op_labels[data_idx] == labels[data_idx, op_idx]])
+       accuracies.append(success / len(op_labels))
+     classifier_accuracies['loc_xy'] = accuracies[0]
+     classifier_accuracies['angle'] = accuracies[1]
+     classifier_accuracies['length'] = accuracies[2]
+     classifier_accuracies['overall'] = sum(accuracies) / 3
+     classifier_accuracies['loss'] = loss
+     return classifier_accuracies
 
   
   def transfer_weigths_from_alexnet(self):
@@ -136,6 +163,26 @@ class networkTrainer:
     self.__partition_dataset()
     self.__writer = SummaryWriter()
 
+  def __plot_accuracy_graphs(self, dataset_name, iter_count): 
+
+    if(dataset_name == 'val'):
+      dataset_x = self.__val_x
+      labels = self.__val_y
+    elif(dataset_name == 'test'):
+      dataset_x = self.__test_x
+      labels = self.__test_y
+    elif(dataset_name == 'train'):
+      dataset_x = self.__train_x
+      labels = self.__train_y
+      
+    accuracy = self.__net.calculate_accuracy(dataset_x, labels)
+
+    self.__writer.add_scalar('accuracy/'+dataset_name+'loc_xy', accuracy['loc_xy'], iter_count)
+    self.__writer.add_scalar('accuracy/'+dataset_name+'angle', accuracy['angle'], iter_count)
+    self.__writer.add_scalar('accuracy/'+dataset_name+'length', accuracy['length'], iter_count) 
+    self.__writer.add_scalar('accuracy/'+dataset_name+'overall', accuracy['overall'], iter_count)
+    self.__writer.add_scalar('loss/' + dataset_name, accuracy['loss'], iter_count)
+
 
 
   def train_network(self):
@@ -145,10 +192,12 @@ class networkTrainer:
     #loss_function = nn.MSELoss()
 
     # For visualisation
-    images = self.__train_x[0,0,:,:,:].reshape(self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
-    # create grid of images
-    img_grid = torchvision.utils.make_grid(images * 255)
-    self.__writer.add_image('baxter_poking_image', img_grid)
+    img1 = self.__train_x[0,0,:,:,:]
+    img2 = self.__train_x[0,1,:,:,:]
+  
+    self.__writer.add_image('baxter_poking_image', img1)
+    self.__writer.add_image('baxter_poking_image', img2)
+    self.__writer.add_graph(self.__net, (img1.unsqueeze(0), img2.unsqueeze(0)))
     # TODO: Find how model with weights can be visualised
     # self.__writer.add_graph(self.__net, self.__train_x[0,:,:,:,:])
 
@@ -159,19 +208,26 @@ class networkTrainer:
       for i in tqdm(range(0, self.__train_x.shape[0], self.BATCH_SIZE)):
         batch_x = self.__train_x[i:i+self.BATCH_SIZE].to(self.__data_device)
         batch_y = self.__train_y[i:i+self.BATCH_SIZE].to(self.__data_device)
-        self.__net.zero_grad()
-        outputs = self.__net(batch_x)
+        # batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+        # batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+
+        batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+        batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+
+        # self.__net.zero_grad()
+        outputs = self.__net(batch_x_img1, batch_x_img2)
         loss = self.__net.inverse_loss(outputs, batch_y)
         #loss = loss_function(outputs, batch_y)
         print(loss)
         loss.backward()
         optimizer.step()
+        self.__plot_accuracy_graphs(dataset_name='val', iter_count=epoch * self.BATCH_SIZE + i)
+        self.__plot_accuracy_graphs(dataset_name='train', iter_count=epoch * self.BATCH_SIZE + i)
 
-        # log data for tensorboard
-        # writer.add_scalar('Loss/train', np.random.random(), n_iter)
-        # writer.add_scalar('Loss/test', np.random.random(), n_iter)
-        # writer.add_scalar('Accuracy/train', np.random.random(), n_iter)
-        # writer.add_scalar('Accuracy/test', np.random.random(), n_iter)
+
+    self.__plot_accuracy_graphs(dataset_name='test', iter_count=epoch * self.BATCH_SIZE + i)
+
+ 
 
     # self.__writer.close()
 
@@ -201,10 +257,10 @@ class networkTrainer:
 
     
 if __name__=='__main__':
-  dataset_path = '../data/mini_data'
+  dataset_path = '../data/baxter_poke'
   poking_data = BaxterPokingDataReader(dataset_path)
   poking_data.read_and_process_data()
-  dl_trainer = networkTrainer(poking_data.total_data[:100])
+  dl_trainer = networkTrainer(poking_data.total_data[:100], EPOCHS=100)
   dl_trainer.train_network()
   #model_state = net.state_dict()
   #net.tranfer_weigths_from(alexnet_state)
