@@ -6,6 +6,8 @@ import numpy as np
 import scipy.ndimage
 import matplotlib.pyplot as plt
 import cv2
+import torch
+import json
 
 from config import *
 
@@ -28,11 +30,15 @@ class BaxterPokingDataReader:
     self.__class_counts = [self.__xbin_count, self.__ybin_count,
                            self.__xybin_count, self.__anglebin_count, 
                            self.__len_actionbin_count]
+    self.__labels = {}
+    self.__ids = []
+    self.__prefix_name = 'poke_'
+    self.__write_path = '../data/processed_poke'
  
   def __load_data_from_directory(self):
     data_runs = os.listdir(self.__base_path)
     
-    for folder in data_runs:
+    for folder in data_runs[:1]:
       folder_path = os.path.join(self.__base_path, folder)
       gt_file_path = os.path.join(folder_path, 'actions.npy')
       ground_truth = np.load(gt_file_path)
@@ -73,6 +79,8 @@ class BaxterPokingDataReader:
     ACTIONLEN=4
     TOTAL_ANGLE = 2 * np.pi
     GT_TOTAL_NO = 4
+    all_images = []
+    all_gts = []
     for data in self.total_data:
       images, groundtruth = data
       groundtruth[ACTION_COORD_X] =  round(groundtruth[ACTION_COORD_X] / self.__image_width
@@ -89,16 +97,51 @@ class BaxterPokingDataReader:
       groundtruth = groundtruth.astype(np.int16)
       gt_onehot_vectors=[]
       print(groundtruth)
-      for index, gt_value in enumerate(groundtruth[:-1]):
-        #Construct a one-hot vector for ground truth
-        gt_onehot_vectors.append(np.eye(self.__class_counts[index])[gt_value])
-      discretised_data.append([images, gt_onehot_vectors, groundtruth])
-    self.total_data = discretised_data
+      # for index, gt_value in enumerate(groundtruth[:-1]):
+      #   #Construct a one-hot vector for ground truth
+      #   gt_onehot_vectors.append(np.eye(self.__class_counts[index])[gt_value])
+      #discretised_data.append([images, gt_onehot_vectors, groundtruth])
+      all_images.append(images)
+      all_gts.append(groundtruth)
+      #discretised_data.append([images, gt_onehot_vectors, groundtruth])
+    all_images = torch.tensor(all_images)
+    all_gts = torch.tensor(all_gts)
+    self.total_data = [all_images, all_gts]
+
+  def __write_processed_data(self):
+    all_images = self.total_data[0]
+    all_gts = self.total_data[1]
+    max_index = 100
+
+    if not os.path.exists(self.__write_path):
+      os.makedirs(self.__write_path)
+
+    for index in range(len(self.total_data[0])):
+      this_label = self.__prefix_name + str(index)
+      self.__labels[this_label] = all_gts[index].tolist()
+      self.__ids.append(this_label)
+      # torch.save(os.path.join(self.__write_path, this_label + '.pt'), all_images[0])
+      torch.save(all_images[index], os.path.join(self.__write_path, this_label + '.pt'))
+      if index > max_index:
+         break
+   
+    with open(os.path.join(self.__write_path, 'labels.json'), 'w') as labels_file:
+      json.dump(self.__labels, labels_file)
+
+    with open(os.path.join(self.__write_path, 'ids.json'), 'w') as ids_file:
+      json.dump(self.__ids, ids_file)
+
+    
+
+
+
+
 
   def read_and_process_data(self):
     self.__load_data_from_directory()
     self.__remove_invalid_data()
     self.__dicretise_gt_actions()
+    self.__write_processed_data()
 
   def get_stored_data(self):
     return self.total_data
@@ -108,7 +151,7 @@ class BaxterPokingDataReader:
   
 
 if __name__=='__main__':
-  data_directory  = '/home/senthilpalanisamy/work/winter_project/my_code/data/mini_data'
+  data_directory  = '../data/mini_data'
   pokedata = BaxterPokingDataReader(data_directory)
   pokedata.read_and_process_data()
 
