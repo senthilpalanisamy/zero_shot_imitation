@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import cv2
 import torch
 import json
+import random
 
 from config import *
 
@@ -34,11 +35,13 @@ class BaxterPokingDataReader:
     self.__ids = []
     self.__prefix_name = 'poke_'
     self.__write_path = '../data/processed_poke'
+    self.__VAL_PERCENTAGE = 0.1
+    self.__TEST_PERCENTAGE = 0.1
  
   def __load_data_from_directory(self):
     data_runs = os.listdir(self.__base_path)
     
-    for folder in data_runs[:1]:
+    for folder in data_runs:
       folder_path = os.path.join(self.__base_path, folder)
       gt_file_path = os.path.join(folder_path, 'actions.npy')
       ground_truth = np.load(gt_file_path)
@@ -68,6 +71,7 @@ class BaxterPokingDataReader:
     IS_VALID_INDEX=-1
     self.total_data = [data for data in self.total_data if 
                         data[GT_INDEX][IS_VALID_INDEX]]
+
 
   def __dicretise_gt_actions(self):
     discretised_data = []
@@ -101,47 +105,59 @@ class BaxterPokingDataReader:
       #   #Construct a one-hot vector for ground truth
       #   gt_onehot_vectors.append(np.eye(self.__class_counts[index])[gt_value])
       #discretised_data.append([images, gt_onehot_vectors, groundtruth])
-      all_images.append(images)
-      all_gts.append(groundtruth)
-      #discretised_data.append([images, gt_onehot_vectors, groundtruth])
-    all_images = torch.tensor(all_images)
-    all_gts = torch.tensor(all_gts)
-    self.total_data = [all_images, all_gts]
+      # all_images.append(images)
+      # all_gts.append(groundtruth)
+      discretised_data.append([images, groundtruth])
+    #all_images = torch.tensor(all_images)
+    #all_gts = torch.tensor(all_gts)
+    self.total_data = discretised_data
 
-  def __write_processed_data(self):
-    all_images = self.total_data[0]
-    all_gts = self.total_data[1]
-    max_index = 100
+  def __write_processed_data(self, partition_name, start_index, end_index):
 
-    if not os.path.exists(self.__write_path):
-      os.makedirs(self.__write_path)
+    DATA_INDEX = 0
+    GT_INDEX = 1
+    write_path = os.path.join(self.__write_path, partition_name)
+    if not os.path.exists(write_path):
+      os.makedirs(write_path)
 
-    for index in range(len(self.total_data[0])):
-      this_label = self.__prefix_name + str(index)
-      self.__labels[this_label] = all_gts[index].tolist()
+    # all_images = self.total_data[0]
+    # all_gts = self.total_data[1]
+   
+    for index in range(start_index, end_index):
+      this_label = self.__prefix_name + partition_name+ str(index)
+      self.__labels[this_label] = self.total_data[index][GT_INDEX].tolist()
       self.__ids.append(this_label)
       # torch.save(os.path.join(self.__write_path, this_label + '.pt'), all_images[0])
-      torch.save(all_images[index], os.path.join(self.__write_path, this_label + '.pt'))
-      if index > max_index:
-         break
+      torch.save(self.total_data[index][DATA_INDEX], 
+                 os.path.join(write_path, this_label + '.pt'))
    
-    with open(os.path.join(self.__write_path, 'labels.json'), 'w') as labels_file:
+    with open(os.path.join(write_path, 'labels.json'), 'w') as labels_file:
       json.dump(self.__labels, labels_file)
 
-    with open(os.path.join(self.__write_path, 'ids.json'), 'w') as ids_file:
+    with open(os.path.join(write_path, 'ids.json'), 'w') as ids_file:
       json.dump(self.__ids, ids_file)
-
-    
-
-
-
 
 
   def read_and_process_data(self):
     self.__load_data_from_directory()
     self.__remove_invalid_data()
+    # self.__partition_data()
     self.__dicretise_gt_actions()
-    self.__write_processed_data()
+    random.shuffle(self.total_data)
+
+    data_len = len(self.total_data) 
+    test_index_start = 0
+    test_index_end = int(self.__TEST_PERCENTAGE * data_len)
+    val_index_start = test_index_end 
+    val_index_end = val_index_start + int(self.__VAL_PERCENTAGE * data_len)
+    train_index_start = val_index_end
+    train_index_end = data_len
+    self.__write_processed_data(partition_name = 'train', start_index = train_index_start, 
+                                end_index = train_index_end)
+    self.__write_processed_data(partition_name='test', start_index = test_index_start, 
+                                end_index = test_index_end)
+    self.__write_processed_data(partition_name='val', start_index = val_index_start, 
+                                end_index = val_index_end)
 
   def get_stored_data(self):
     return self.total_data
@@ -151,7 +167,7 @@ class BaxterPokingDataReader:
   
 
 if __name__=='__main__':
-  data_directory  = '../data/mini_data'
+  data_directory  = '../data/baxter_poke'
   pokedata = BaxterPokingDataReader(data_directory)
   pokedata.read_and_process_data()
 
