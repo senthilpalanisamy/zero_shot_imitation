@@ -116,6 +116,8 @@ class BaxterPokingDataReader:
 
     DATA_INDEX = 0
     GT_INDEX = 1
+    partiion_labels = {}
+    ids = []
     write_path = os.path.join(self.__write_path, partition_name)
     if not os.path.exists(write_path):
       os.makedirs(write_path)
@@ -125,17 +127,17 @@ class BaxterPokingDataReader:
    
     for index in range(start_index, end_index):
       this_label = self.__prefix_name + partition_name+ str(index)
-      self.__labels[this_label] = self.total_data[index][GT_INDEX].tolist()
-      self.__ids.append(this_label)
+      partiion_labels[this_label] = self.total_data[index][GT_INDEX].tolist()
+      ids.append(this_label)
       # torch.save(os.path.join(self.__write_path, this_label + '.pt'), all_images[0])
       torch.save(self.total_data[index][DATA_INDEX], 
                  os.path.join(write_path, this_label + '.pt'))
    
     with open(os.path.join(write_path, 'labels.json'), 'w') as labels_file:
-      json.dump(self.__labels, labels_file)
+      json.dump(partiion_labels, labels_file)
 
     with open(os.path.join(write_path, 'ids.json'), 'w') as ids_file:
-      json.dump(self.__ids, ids_file)
+      json.dump(ids, ids_file)
 
 
   def read_and_process_data(self):

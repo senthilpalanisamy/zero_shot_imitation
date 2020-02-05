@@ -1,5 +1,6 @@
 import os
 import time
+import json
 
 import cv2
 import numpy as np
@@ -13,8 +14,9 @@ import torchvision
 from torchvision import models
 from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils import data
 
-from dataset_reader import BaxterPokingDataReader
+from data_generator import Dataset
 from config import *
 
 
@@ -44,6 +46,7 @@ class Net(nn.Module):
     self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
     self._IMAGE_COL = 224
+    self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 
@@ -86,7 +89,8 @@ class Net(nn.Module):
 
   def inverse_loss(self, outputs, targets):
     op1, op2, op3 = outputs
-    target1, target2, target3 = targets[:,0], targets[:,1], targets[:,2]
+    XY_BIN, THETA, LENGTH = 2, 3, 4
+    target1, target2, target3 = targets[:,XY_BIN], targets[:,THETA], targets[:,LENGTH]
     #criterion = nn.CrossEntropyLoss()
     criterion = nn.CrossEntropyLoss().cuda()
     # op = torch.LongTensor(target1)
@@ -111,13 +115,15 @@ class Net(nn.Module):
      for op_idx, op in enumerate(outputs):
        op_labels = torch.argmax(op, axis=1)
        success = sum([1 for data_idx in range(len(op_labels))\
-                      if op_labels[data_idx] == labels[data_idx, op_idx]])
+                      if op_labels[data_idx] == labels[data_idx, op_idx+2]])
        accuracies.append(success / len(op_labels))
      classifier_accuracies['loc_xy'] = accuracies[0]
      classifier_accuracies['angle'] = accuracies[1]
      classifier_accuracies['length'] = accuracies[2]
      classifier_accuracies['overall'] = sum(accuracies) / 3
-     classifier_accuracies['loss'] = loss
+     classifier_accuracies['loss'] = loss.data
+     del loss
+     del outputs
      return classifier_accuracies
 
   
@@ -142,40 +148,33 @@ class Net(nn.Module):
     self.load_state_dict(model_state)
 
 class networkTrainer:
-  def __init__(self, dataset, EPOCHS=3, BATCH_SIZE=8):
-    self.__device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-    self.__data_device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+  def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100):
+    self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    self.__data_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    params = {'batch_size': BATCH_SIZE,
+            'shuffle': True,
+            'num_workers': 6}
+
+    self.train_data_generator = data.DataLoader(partitioned_datasets['train'], **params)
+    self.val_data_generator = data.DataLoader(partitioned_datasets['val'], **params)
+    self.test_data_generator = data.DataLoader(partitioned_datasets['test'], **params)
+
 
     self.__net = Net()
     self.__net.transfer_weigths_from_alexnet()
-    # self.__net.to(self.__device)
-    # self.__net = self.__net.cuda()
     self.__net = self.__net.to(self.__device)
-    # self.__net = torch.nn.DataParallel(self.__net, device_ids=["cuda:0", "cuda:1", "cuda:2", "cuda:3"])
-    self.__dataset = dataset
-    self.__IMG_HEIGHT = dataset[0][0].shape[2]
-    self.__IMG_WIDTH = dataset[0][0].shape[3]
-    self.__NO_OF_CHANNELS = dataset[0][0].shape[1]
-    self.__VAL_PERCENTAGE = 0.1
-    self.__TEST_PERCENTAGE = 0.1
+    #tensor_shape = next(self.train_data_generator)[0][0].shape
+    self.sample_data = partitioned_datasets['train'][0]
+    tensor_shape = self.sample_data[0].shape
+    self.__IMG_HEIGHT = tensor_shape[2]
+    self.__IMG_WIDTH = tensor_shape[3]
+    self.__NO_OF_CHANNELS = tensor_shape[1]
     self.EPOCHS = EPOCHS
     self.BATCH_SIZE = BATCH_SIZE
-    self.__partition_dataset()
     self.__writer = SummaryWriter()
 
-  def __plot_accuracy_graphs(self, dataset_name, iter_count): 
-
-    if(dataset_name == 'val'):
-      dataset_x = self.__val_x
-      labels = self.__val_y
-    elif(dataset_name == 'test'):
-      dataset_x = self.__test_x
-      labels = self.__test_y
-    elif(dataset_name == 'train'):
-      dataset_x = self.__train_x
-      labels = self.__train_y
-      
-    accuracy = self.__net.calculate_accuracy(dataset_x, labels)
+  def __write_values_to_graph(self, dataset_name, accuracy, iter_count):
 
     self.__writer.add_scalar('accuracy/'+dataset_name+'loc_xy', accuracy['loc_xy'], iter_count)
     self.__writer.add_scalar('accuracy/'+dataset_name+'angle', accuracy['angle'], iter_count)
@@ -184,16 +183,49 @@ class networkTrainer:
     self.__writer.add_scalar('loss/' + dataset_name, accuracy['loss'], iter_count)
 
 
+  def __plot_accuracy_graphs(self, dataset_name, iter_count): 
+
+    if(dataset_name == 'val'):
+        data_generator = self.val_data_generator
+    elif(dataset_name == 'test'):
+      data_generator = self.test_data_generator
+    elif(dataset_name == 'train'):
+      data_generator = self.train_data_generator
+    #dataset_x = dataset_x.to(self.__device)
+    #labels = lables.to(self.__device)
+
+
+    full_accuracy = {'loc_xy':0, 'angle':0, 'length':0, 'overall':0, 'loss':0}
+    count = 0
+    for batch_x, labels in data_generator:
+      batch_x = batch_x.to(self.__device)
+      labels = labels.to(self.__device)
+
+      batch_accuracy = self.__net.calculate_accuracy(batch_x, labels)
+      count += 1
+      for key, value in batch_accuracy.items():
+        full_accuracy[key] += value
+      torch.cuda.empty_cache() 
+
+    for key, value in full_accuracy.items():
+      full_accuracy[key] = value / count
+
+    self.__write_values_to_graph(dataset_name, full_accuracy, iter_count)
+     
+
+
+
 
   def train_network(self):
   
 
     optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
+    X, y  = self.sample_data
     #loss_function = nn.MSELoss()
 
     # For visualisation
-    img1 = self.__train_x[0,0,:,:,:]
-    img2 = self.__train_x[0,1,:,:,:]
+    img1 = X[0,:,:,:].to(self.__device)
+    img2 = X[1,:,:,:].to(self.__device)
   
     self.__writer.add_image('baxter_poking_image', img1)
     self.__writer.add_image('baxter_poking_image', img2)
@@ -203,64 +235,69 @@ class networkTrainer:
 
 
 
+    index =0
 
     for epoch in range(self.EPOCHS):
-      for i in tqdm(range(0, self.__train_x.shape[0], self.BATCH_SIZE)):
-        batch_x = self.__train_x[i:i+self.BATCH_SIZE].to(self.__data_device)
-        batch_y = self.__train_y[i:i+self.BATCH_SIZE].to(self.__data_device)
-        # batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
-        # batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
+      for batch_x, batch_y in tqdm(self.train_data_generator):
+        index += 1
+
+        self.__net.zero_grad()
+        batch_x = batch_x.to(self.__device)
+        batch_y = batch_y.to(self.__device)
 
         batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
         batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
 
-        # self.__net.zero_grad()
         outputs = self.__net(batch_x_img1, batch_x_img2)
         loss = self.__net.inverse_loss(outputs, batch_y)
-        #loss = loss_function(outputs, batch_y)
         print(loss)
         loss.backward()
         optimizer.step()
-        self.__plot_accuracy_graphs(dataset_name='val', iter_count=epoch * self.BATCH_SIZE + i)
-        self.__plot_accuracy_graphs(dataset_name='train', iter_count=epoch * self.BATCH_SIZE + i)
+
+        batch_accuracy = self.__net.calculate_accuracy(batch_x, batch_y)
+        self.__write_values_to_graph(dataset_name = 'train', accuracy = batch_accuracy,
+                                     iter_count = index)
+        del loss
+        del outputs
+      print('validation')
+      self.__plot_accuracy_graphs(dataset_name='val', iter_count=index)
+        #self.__plot_accuracy_graphs(dataset_name='train', iter_count=epoch * self.BATCH_SIZE + i)
+      print('end validation')
 
 
-    self.__plot_accuracy_graphs(dataset_name='test', iter_count=epoch * self.BATCH_SIZE + i)
+    self.__plot_accuracy_graphs(dataset_name='test', iter_count = index)
+    self.__net.save_state_dict('mytraining.pt')
 
  
 
     # self.__writer.close()
 
 
-  def __partition_dataset(self):
-
-    # 2 because this is a simese type network
-    X = torch.Tensor([i[0] for i in self.__dataset]).view(-1, 2, self.__NO_OF_CHANNELS , 
-                                                         self.__IMG_HEIGHT, self.__IMG_WIDTH).to(self.__data_device)
-    X = X / 255.0
-    # Only x is predicted as of now
-    # Think on how to handle this better
-    Y = torch.Tensor([i[2][2:6] for i in self.__dataset]).to(self.__data_device)
-
-    val_size = int(len(X) * self.__VAL_PERCENTAGE)
-    print(val_size)
-
-    test_size = int(len(X) * self.__TEST_PERCENTAGE)
-
-    self.__train_x = X[:-val_size-test_size]
-    self.__train_y = Y[:-val_size-test_size]
-    self.__val_x = X[-val_size:]
-    self.__val_y = Y[-val_size:]
-    self.__test_x = X[-val_size - test_size:-val_size]
-    self.__test_y = Y[-val_size - test_size:-val_size] 
-
-
-    
 if __name__=='__main__':
-  dataset_path = '../data/baxter_poke'
-  poking_data = BaxterPokingDataReader(dataset_path)
-  poking_data.read_and_process_data()
-  dl_trainer = networkTrainer(poking_data.total_data[:100], EPOCHS=100)
+
+  base_path = '../data/processed_poke'
+  labels = {}
+  ids = {}
+  partitioned_datasets = {}
+  for data_partition_name in ['train', 'val', 'test']:
+    label_path = os.path.join(base_path, data_partition_name, 'labels.json')
+    ids_path = os.path.join(base_path, data_partition_name, 'ids.json')
+
+    with open(label_path) as json_file:
+      labels[data_partition_name] = json.load(json_file)
+
+    with open(ids_path) as json_file:
+      ids[data_partition_name] = json.load(json_file)
+
+  partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train')
+  # training_generator = data.DataLoader(train_dataset, **params)
+
+  partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test')
+  # test_generator = data.DataLoader(test_dataset, **params)
+
+  partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val')
+
+  dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=100)
   dl_trainer.train_network()
   #model_state = net.state_dict()
   #net.tranfer_weigths_from(alexnet_state)
