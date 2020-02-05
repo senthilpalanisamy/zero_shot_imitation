@@ -25,6 +25,7 @@ class Net(nn.Module):
     super().__init__()
 
     self.__to_linear = 3600
+    NO_OF_ACTIONS = 3
     self.conv1 = nn.Conv2d(3, 64, 11, stride=4)
     self.conv2 = nn.Conv2d(64, 192, 5, stride=1, padding=2)
     self.conv3 = nn.Conv2d(192, 384, 3, stride=1, padding=2)
@@ -42,15 +43,19 @@ class Net(nn.Module):
     self.pre_length_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT + ANGLE_BIN_COUNT,
                                     200)
     self.length_classifier = nn.Linear(200, LEN_ACTIONBIN_COUNT)
+    self.forward_fc1 = nn.Linear(self.__to_linear/2 + NO_OF_ACTIONS)
+    self.forward_fc2 = nn.Linear(self.__to_linear/2)
+    self.forward_fc3 = nn.Linear(self.__to_linear/2)
     self.EPOCHS = 100
     self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
     self._IMAGE_COL = 224
     self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    self.lamda = 0.5
 
 
 
-  def forward(self, image1, image2):
+  def forward(self, image1, image2, actions):
     latent_features = []
     image_pair=[image1, image2]
     for index in range(2):
@@ -84,11 +89,15 @@ class Net(nn.Module):
     x = self.pre_length_classifier(x)
     x = self.length_classifier(x)
     op3 = F.softmax(x, dim=1)
+    forward_input = torch.cat((flatten_input1,actions), 1)
+    x = self.forward_fc1(forward_input)
+    x = self.forward_fc2(x)
+    forward_output = self.forward_fc3(x)
     #final_op = torch.cat((op1.unsqueeze(0), op2.unsqueeze(0), op3.unsqueeze(0)), 0)   
-    return (op1, op2, op3)
+    return (op1, op2, op3, forward_output, flatten_input1, flatten_input2)
 
   def inverse_loss(self, outputs, targets):
-    op1, op2, op3 = outputs
+    op1, op2, op3, forward_op, latent_image, latent_predicition = outputs
     XY_BIN, THETA, LENGTH = 2, 3, 4
     target1, target2, target3 = targets[:,XY_BIN], targets[:,THETA], targets[:,LENGTH]
     #criterion = nn.CrossEntropyLoss()
@@ -98,7 +107,9 @@ class Net(nn.Module):
     loss1 = criterion(op1.float(), target1.long()) 
     loss2 = criterion(op2.float(), target2.long()) 
     loss3 = criterion(op3.float(), target3.long()) 
-    total_loss = loss1 + loss2 + loss3             
+    MSEloss = nn.MSELoss()
+    forward_loss = MSEloss(latent_image, latent_predicition) 
+    total_loss = loss1 + loss2 + loss3 + self.lamda * forward_loss             
     return total_loss
 
   def calculate_accuracy(self, data, labels):
@@ -248,7 +259,7 @@ class networkTrainer:
         batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
         batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
 
-        outputs = self.__net(batch_x_img1, batch_x_img2)
+        outputs = self.__net(batch_x_img1, batch_x_img2, batch_y)
         loss = self.__net.inverse_loss(outputs, batch_y)
         print(loss)
         loss.backward()
