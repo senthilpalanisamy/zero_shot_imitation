@@ -43,9 +43,9 @@ class Net(nn.Module):
     self.pre_length_classifier = nn.Linear(self.__to_linear + XYBIN_COUNT + ANGLE_BIN_COUNT,
                                     200)
     self.length_classifier = nn.Linear(200, LEN_ACTIONBIN_COUNT)
-    self.forward_fc1 = nn.Linear(self.__to_linear/2 + NO_OF_ACTIONS)
-    self.forward_fc2 = nn.Linear(self.__to_linear/2)
-    self.forward_fc3 = nn.Linear(self.__to_linear/2)
+    self.forward_fc1 = nn.Linear(self.__to_linear//2 + NO_OF_ACTIONS, self.__to_linear//2)
+    self.forward_fc2 = nn.Linear(self.__to_linear//2, self.__to_linear//2)
+    self.forward_fc3 = nn.Linear(self.__to_linear//2, self.__to_linear//2)
     self.EPOCHS = 100
     self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
@@ -98,7 +98,7 @@ class Net(nn.Module):
 
   def inverse_loss(self, outputs, targets):
     op1, op2, op3, forward_op, latent_image, latent_predicition = outputs
-    XY_BIN, THETA, LENGTH = 2, 3, 4
+    XY_BIN, THETA, LENGTH = 0, 1, 2
     target1, target2, target3 = targets[:,XY_BIN], targets[:,THETA], targets[:,LENGTH]
     #criterion = nn.CrossEntropyLoss()
     criterion = nn.CrossEntropyLoss().cuda()
@@ -116,17 +116,17 @@ class Net(nn.Module):
 
      img1 = data[:,0,:,:,:]
      img2 = data[:,1,:,:,:]
-     outputs = self.forward(img1, img2)
+     outputs = self.forward(img1, img2, labels)
      self.zero_grad()
      loss = self.inverse_loss(outputs, labels)
      accuracies = []
      classifier_accuracies = {}
 
 
-     for op_idx, op in enumerate(outputs):
+     for op_idx, op in enumerate(outputs[:3]):
        op_labels = torch.argmax(op, axis=1)
        success = sum([1 for data_idx in range(len(op_labels))\
-                      if op_labels[data_idx] == labels[data_idx, op_idx+2]])
+                      if op_labels[data_idx] == labels[data_idx, op_idx]])
        accuracies.append(success / len(op_labels))
      classifier_accuracies['loc_xy'] = accuracies[0]
      classifier_accuracies['angle'] = accuracies[1]
@@ -232,6 +232,7 @@ class networkTrainer:
 
     optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
     X, y  = self.sample_data
+    y = y.to(self.__device).float().unsqueeze(0)
     #loss_function = nn.MSELoss()
 
     # For visualisation
@@ -240,7 +241,7 @@ class networkTrainer:
   
     self.__writer.add_image('baxter_poking_image', img1)
     self.__writer.add_image('baxter_poking_image', img2)
-    self.__writer.add_graph(self.__net, (img1.unsqueeze(0), img2.unsqueeze(0)))
+    self.__writer.add_graph(self.__net, (img1.unsqueeze(0), img2.unsqueeze(0), y))
     # TODO: Find how model with weights can be visualised
     # self.__writer.add_graph(self.__net, self.__train_x[0,:,:,:,:])
 

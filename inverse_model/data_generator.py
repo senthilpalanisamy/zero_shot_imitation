@@ -23,7 +23,7 @@ class Dataset(data.Dataset):
 
         # Load data and get label
         X = torch.tensor(torch.load(os.path.join(self.data_path, ID + '.pt'))).float()
-        y = torch.tensor(self.labels[ID])
+        y = torch.tensor(self.labels[ID])[2:5].float()
 
         return X, y
 
