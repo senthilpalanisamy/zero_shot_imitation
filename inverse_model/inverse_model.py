@@ -1,6 +1,8 @@
 import os
 import time
 import json
+import sys
+from datetime import date, datetime
 
 import cv2
 import numpy as np
@@ -18,6 +20,8 @@ from torch.utils import data
 
 from data_generator import Dataset
 from config import *
+from utils import *
+import random
 
 
 class Net(nn.Module):
@@ -46,12 +50,11 @@ class Net(nn.Module):
     self.forward_fc1 = nn.Linear(self.__to_linear//2 + NO_OF_ACTIONS, self.__to_linear//2)
     self.forward_fc2 = nn.Linear(self.__to_linear//2, self.__to_linear//2)
     self.forward_fc3 = nn.Linear(self.__to_linear//2, self.__to_linear//2)
-    self.EPOCHS = 100
-    self.BATCH_SIZE = 8
     self._IMAGE_WIDTH = 224
     self._IMAGE_COL = 224
     self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.lamda = 0.5
+
 
 
 
@@ -80,15 +83,25 @@ class Net(nn.Module):
     latent_2images = torch.cat((flatten_input1, flatten_input2), 1) 
     x = self.pre_xy_classifier(latent_2images.view(-1, self.__to_linear))
     x = self.xy_classifier(x)
-    op1 = F.softmax(x, dim=1)
+    # op1 = F.softmax(x, dim=1)
+    op1 = torch.argmax(x, axis=1).to(self.__device)
+    op1 = (torch.zeros(len(op1), XYBIN_COUNT)).to(self.__device).scatter_(1, op1.unsqueeze(1), 1.)
+    #op1 = torch.FloatTensor(N, XYBIN_COUNT).to(self.__device).scatter_(1,op1, 1)
     angle_concat = torch.cat((latent_2images, op1), 1) 
     x = self.pre_angle_classifier(angle_concat)
     x = self.angle_classifier(x)
-    op2 = F.softmax(x, dim=1)
+    op2 = torch.argmax(x, axis=1)
+    op2 = (torch.zeros(len(op2), ANGLE_BIN_COUNT)).to(self.__device).scatter_(1, op2.unsqueeze(1), 1.)
+    # op2 = torch.FloatTensor(N, ANGLE_BIN_COUNT).to(self.__device).scatter_(1,op2, 1)
     x = torch.cat((angle_concat, op2), 1)
     x = self.pre_length_classifier(x)
     x = self.length_classifier(x)
-    op3 = F.softmax(x, dim=1)
+
+    op3 = torch.argmax(x, axis=1)
+    op3 = (torch.zeros(len(op3), LEN_ACTIONBIN_COUNT)).to(self.__device).scatter_(1, op3.unsqueeze(1), 1.)
+    #op3 = (torch.zeros(len(op3), LEN_ACTIONBIN_COUNT).scatter_(1, op3.unsqueeze(1), 1.)).to(self.__device)
+    #op3 = torch.FloatTensor(N, LEN_ACTIONBIN_COUNT).to(self.__device).scatter_(1,op3, 1)
+
     forward_input = torch.cat((flatten_input1,actions), 1)
     x = self.forward_fc1(forward_input)
     x = self.forward_fc2(x)
@@ -159,7 +172,7 @@ class Net(nn.Module):
     self.load_state_dict(model_state)
 
 class networkTrainer:
-  def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100):
+  def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100, experiment_name='exp1'):
     self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     self.__data_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -173,6 +186,7 @@ class networkTrainer:
 
 
     self.__net = Net()
+    # self.__net.apply(weights_init)
     self.__net.transfer_weigths_from_alexnet()
     self.__net = self.__net.to(self.__device)
     #tensor_shape = next(self.train_data_generator)[0][0].shape
@@ -183,7 +197,11 @@ class networkTrainer:
     self.__NO_OF_CHANNELS = tensor_shape[1]
     self.EPOCHS = EPOCHS
     self.BATCH_SIZE = BATCH_SIZE
-    self.__writer = SummaryWriter()
+    self.exp_name = experiment_name
+    path_to_write = os.path.join('run', experiment_name)
+    self.__writer = SummaryWriter(path_to_write)
+    self.__accuracies = {}
+    
 
   def __write_values_to_graph(self, dataset_name, accuracy, iter_count):
 
@@ -222,6 +240,7 @@ class networkTrainer:
       full_accuracy[key] = value / count
 
     self.__write_values_to_graph(dataset_name, full_accuracy, iter_count)
+    self.__accuracies[dataset_name] = full_accuracy
      
 
 
@@ -230,7 +249,7 @@ class networkTrainer:
   def train_network(self):
   
 
-    optimizer = optim.Adam(self.__net.parameters(), lr=0.001)
+    optimizer = optim.Adam(self.__net.parameters(), lr=0)
     X, y  = self.sample_data
     y = y.to(self.__device).float().unsqueeze(0)
     #loss_function = nn.MSELoss()
@@ -263,14 +282,25 @@ class networkTrainer:
         outputs = self.__net(batch_x_img1, batch_x_img2, batch_y)
         loss = self.__net.inverse_loss(outputs, batch_y)
         print(loss)
+        # get_dot = register_hooks(loss)
         loss.backward()
+        # dot = get_dot()
+        # dot.save('tmp.dot')
+        # plot_grad_flow(self.__net.named_parameters())
+
+
         optimizer.step()
 
         batch_accuracy = self.__net.calculate_accuracy(batch_x, batch_y)
+
+        self.__accuracies['train'] = batch_accuracy
         self.__write_values_to_graph(dataset_name = 'train', accuracy = batch_accuracy,
                                      iter_count = index)
         del loss
         del outputs
+        if index > 5000:
+          optimizer = optim.Adam(self.__net.parameters(), lr=1e-4)
+
       print('validation')
       self.__plot_accuracy_graphs(dataset_name='val', iter_count=index)
         #self.__plot_accuracy_graphs(dataset_name='train', iter_count=epoch * self.BATCH_SIZE + i)
@@ -278,7 +308,16 @@ class networkTrainer:
 
 
     self.__plot_accuracy_graphs(dataset_name='test', iter_count = index)
-    self.__net.save_state_dict('mytraining.pt')
+    torch.save(self.__net.state_dict(), os.path.join('./models', self.exp_name + '.pt'))
+    results = [self.__accuracies['test']['overall'], self.__accuracies['val']['overall'],\
+               self.__accuracies['train']['overall'], self.__accuracies['test']['loss'],\
+               self.__accuracies['val']['loss'], self.__accuracies['train']['loss'],\
+               self.__accuracies['test']['loc_xy'], self.__accuracies['test']['angle'],\
+               self.__accuracies['test']['length'], self.__accuracies['val']['loc_xy'],\
+               self.__accuracies['val']['angle'], self.__accuracies['val']['length'],\
+               self.__accuracies['train']['loc_xy'], self.__accuracies['train']['angle'],\
+               self.__accuracies['train']['length']]
+    return results
 
  
 
@@ -290,6 +329,14 @@ if __name__=='__main__':
   base_path = '../data/processed_poke'
   labels = {}
   ids = {}
+  experiment_name = sys.argv[1]
+  no_of_epochs = int(sys.argv[2])
+  seed_no = int(sys.argv[3])
+  experiment_name = experiment_name + 'epoch_' + str(no_of_epochs) +\
+                     datetime.now().strftime("%d_%m_%Y_%H:%M:%S")
+  if seed_no == -1:
+    seed_no = random.randint(0, 10000) 
+  torch.cuda.manual_seed(seed_no)
   partitioned_datasets = {}
   for data_partition_name in ['train', 'val', 'test']:
     label_path = os.path.join(base_path, data_partition_name, 'labels.json')
@@ -300,26 +347,15 @@ if __name__=='__main__':
 
     with open(ids_path) as json_file:
       ids[data_partition_name] = json.load(json_file)
+  exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("H:%M:%S"),
+                 experiment_name, no_of_epochs, seed_no]
 
   partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train')
-  # training_generator = data.DataLoader(train_dataset, **params)
-
   partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test')
-  # test_generator = data.DataLoader(test_dataset, **params)
-
   partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val')
 
-  dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=100)
-  dl_trainer.train_network()
-  #model_state = net.state_dict()
-  #net.tranfer_weigths_from(alexnet_state)
-
-  # net = net.double()
-  # image1 = torch.tensor(np.zeros((1, 3, 224, 224)))
-  # image2 = torch.tensor(np.zeros((1, 3, 224, 224)))
-  # joint_image = [image1.double(), image2.double()]
-  # net.zero_grad()
-  # outputs = net(joint_image)
-  # print('finished')
-
-
+  dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=no_of_epochs, experiment_name=experiment_name)
+  results = dl_trainer.train_network()
+  results = list(map(float, results))
+  row_to_write = exp_details + results
+  write_to_gsheet(row_to_write)
