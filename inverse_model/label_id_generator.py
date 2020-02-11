@@ -48,7 +48,7 @@ class BaxterPokingDataReader:
       N = len(ground_truth)
       ground_truth = np.hstack((ground_truth[:,:2], np.ones((N,1))*-1, ground_truth[:, 2:]))
       image_names = os.listdir(folder_path)
-      image_names = [file_name for file_name in image_names if file_name.endswith('.jpg')]
+      image_names = sorted([file_name for file_name in image_names if file_name.endswith('.jpg')])
       previous_image = cv2.imread(os.path.join(folder_path, image_names[0]))
       
       for index, img_name in enumerate(image_names[1:]):
@@ -57,7 +57,8 @@ class BaxterPokingDataReader:
         #print(ground_truth[index])
         concat_image = np.concatenate((current_image[np.newaxis,: ], 
                                        previous_image[np.newaxis, :]), axis=0)
-        concat_image = np.moveaxis(concat_image, -1, 1)
+        #concat_image = np.moveaxis(concat_image, -1, 1)
+        concat_image = concat_image.reshape((2, 3, 240, 240))
         this_data.append(concat_image)
         this_data.append(ground_truth[index])
         self.total_data.append(this_data)
