@@ -2,14 +2,16 @@ import torch
 from torch.utils import data
 import os
 import json
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 class Dataset(data.Dataset):
   'Characterizes a dataset for PyTorch'
-  def __init__(self, list_IDs, labels, partition):
+  def __init__(self, list_IDs, labels, partition, base_path):
         'Initialization'
         self.labels = labels
         self.list_IDs = list_IDs
-        self.base_path = '../data/processed_poke'
+        self.base_path = base_path
         self.data_path = os.path.join(self.base_path, partition)
 
   def __len__(self):
@@ -22,7 +24,7 @@ class Dataset(data.Dataset):
         ID = self.list_IDs[index]
 
         # Load data and get label
-        X = torch.tensor(torch.load(os.path.join(self.data_path, ID + '.pt'))).float()
+        X = torch.tensor(torch.load(os.path.join(self.data_path, ID + '.pt'))).float() / 255.0
         y = torch.tensor(self.labels[ID])[2:5].float()
 
         return X, y

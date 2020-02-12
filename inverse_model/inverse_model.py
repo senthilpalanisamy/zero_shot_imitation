@@ -25,7 +25,7 @@ import random
 
 
 class Net(nn.Module):
-  def __init__(self):
+  def __init__(self, lamda=0.5):
     super().__init__()
 
     self.__to_linear = 3600
@@ -172,9 +172,9 @@ class Net(nn.Module):
     self.load_state_dict(model_state)
 
 class networkTrainer:
-  def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100, experiment_name='exp1'):
-    self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    self.__data_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+  def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100, experiment_details={}):
+    self.__device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    self.__data_device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 
     params = {'batch_size': BATCH_SIZE,
             'shuffle': True,
@@ -189,6 +189,7 @@ class networkTrainer:
     # self.__net.apply(weights_init)
     self.__net.transfer_weigths_from_alexnet()
     self.__net = self.__net.to(self.__device)
+    self.__net.lamda = experiment_details['lamda']
     #tensor_shape = next(self.train_data_generator)[0][0].shape
     self.sample_data = partitioned_datasets['train'][0]
     tensor_shape = self.sample_data[0].shape
@@ -197,7 +198,7 @@ class networkTrainer:
     self.__NO_OF_CHANNELS = tensor_shape[1]
     self.EPOCHS = EPOCHS
     self.BATCH_SIZE = BATCH_SIZE
-    self.exp_name = experiment_name
+    self.exp_name = experiment_details['exp_name']
     path_to_write = os.path.join('run', experiment_name)
     self.__writer = SummaryWriter(path_to_write)
     self.__accuracies = {}
@@ -258,10 +259,10 @@ class networkTrainer:
     img1 = X[0,:,:,:].to(self.__device)
     img2 = X[1,:,:,:].to(self.__device)
   
-    self.__writer.add_image('baxter_poking_image', img1)
-    self.__writer.add_image('baxter_poking_image', img2)
+    self.__writer.add_image('baxter_poking_image', img1 * 255.0)
+    self.__writer.add_image('baxter_poking_image', img2 * 255.0)
     self.__writer.add_graph(self.__net, (img1.unsqueeze(0), img2.unsqueeze(0), y))
-    # TODO: Find how model with weights can be visualised
+   # TODO: Find how model with weights can be visualised
     # self.__writer.add_graph(self.__net, self.__train_x[0,:,:,:,:])
 
 
@@ -326,14 +327,15 @@ class networkTrainer:
 
 if __name__=='__main__':
 
-  base_path = '../data/processed_poke'
+  base_path = '../data/processed_poke_3'
   labels = {}
   ids = {}
   experiment_name = sys.argv[1]
   no_of_epochs = int(sys.argv[2])
   seed_no = int(sys.argv[3])
-  experiment_name = experiment_name + 'epoch_' + str(no_of_epochs) +\
+  experiment_name = experiment_name + '_epoch_' + str(no_of_epochs) + '_'+\
                      datetime.now().strftime("%d_%m_%Y_%H:%M:%S")
+  lamda = float(sys.argv[4])
   if seed_no == -1:
     seed_no = random.randint(0, 10000) 
   torch.cuda.manual_seed(seed_no)
@@ -350,11 +352,17 @@ if __name__=='__main__':
   exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("H:%M:%S"),
                  experiment_name, no_of_epochs, seed_no]
 
-  partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train')
-  partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test')
-  partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val')
+  partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train', base_path=base_path)
+  partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test', base_path=base_path)
+  partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val', base_path=base_path)
+  experiment_details = {}
+  experiment_details['exp_name'] = experiment_name
+  experiment_details['lamda'] = lamda
 
-  dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=no_of_epochs, experiment_name=experiment_name)
+  exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("%H:%M:%S"),
+                 experiment_name, no_of_epochs, seed_no, lamda]
+
+  dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=no_of_epochs, experiment_details=experiment_details)
   results = dl_trainer.train_network()
   results = list(map(float, results))
   row_to_write = exp_details + results
