@@ -34,7 +34,7 @@ class BaxterPokingDataReader:
     self.__labels = {}
     self.__ids = []
     self.__prefix_name = 'poke_'
-    self.__write_path = '../data/processed_poke_3'
+    self.__write_path = '../data/processed_poke_4'
     self.__VAL_PERCENTAGE = 0.1
     self.__TEST_PERCENTAGE = 0.1
  

@@ -34,9 +34,9 @@ def visualise_dataset(dataset_generator, write_path):
      # vis2 = cv.CreateMat(240, 240, cv2.CV_8UC3)
   
      xy = int(label[0][0]) 
-     y = (xy // X_BINS + 0.5) * (IMAGE_HEIGHT-1) / (Y_BINS - 1 ) * scaling_factor
-     x = (xy % int(X_BINS) + 0.5) * (IMAGE_WIDTH-1) / (X_BINS -1 ) * scaling_factor
-     angle = (label[0][1]+ 0.5) * 2 * np.pi / (ANGLE_BIN_COUNT - 1 )
+     y = (xy // X_BINS + 0.5) * (IMAGE_HEIGHT) / (Y_BINS) * scaling_factor
+     x = (xy % int(X_BINS) + 0.5) * (IMAGE_WIDTH) / (X_BINS) * scaling_factor
+     angle = (label[0][1]+ 0.5) * 2 * np.pi / (ANGLE_BIN_COUNT)
      length = label[0][2] + 0.5
      length = length * scaling_factor
      point1 = (int(x), int(y))
@@ -49,15 +49,15 @@ def visualise_dataset(dataset_generator, write_path):
      #cv2.line(image1,(0,0),(150,150),(255,255,255),15)
   
      final_image = np.concatenate((image1, image2), axis=0)
-     # cv2.imshow('result', final_image)
-     # cv2.imshow('image1', image1)
-     # cv2.imshow('image2', image2)
-     # cv2.waitKey(0)
+     cv2.imshow('result', final_image)
+     cv2.imshow('image1', image1)
+     cv2.imshow('image2', image2)
+     cv2.waitKey(0)
   
      full_path = os.path.join(train_image_path, str(index)+'.jpeg')
      cv2.imwrite(full_path, final_image * 255)
 
-base_path = '../data/processed_poke_3'
+base_path = '../data/processed_poke_4'
 labels = {}
 ids = {}
 partitioned_datasets = {}
