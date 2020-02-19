@@ -17,6 +17,9 @@ from torchvision import models
 from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils import data
+from torchsummary import summary 
+from torch.autograd import Variable
+
 
 from data_generator import Dataset
 from config import *
@@ -53,7 +56,7 @@ class Net(nn.Module):
     self._IMAGE_WIDTH = 224
     self._IMAGE_COL = 224
     self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    self.lamda = 0.5
+    self.lamda = lamda
 
 
 
@@ -82,23 +85,25 @@ class Net(nn.Module):
     flatten_input2 = latent_features[1].reshape(N, -1)
     latent_2images = torch.cat((flatten_input1, flatten_input2), 1) 
     x = self.pre_xy_classifier(latent_2images.view(-1, self.__to_linear))
-    x = self.xy_classifier(x)
+    op1 = self.xy_classifier(x)
     # op1 = F.softmax(x, dim=1)
-    op1 = torch.argmax(x, axis=1).to(self.__device)
-    op1 = (torch.zeros(len(op1), XYBIN_COUNT)).to(self.__device).scatter_(1, op1.unsqueeze(1), 1.)
+    # op1 = torch.argmax(x, axis=1).to(self.__device)
+    # op1 = (torch.zeros(len(op1), XYBIN_COUNT, requires_grad=True)).to(self.__device).scatter_(1, op1.unsqueeze(1), 1.)
     #op1 = torch.FloatTensor(N, XYBIN_COUNT).to(self.__device).scatter_(1,op1, 1)
     angle_concat = torch.cat((latent_2images, op1), 1) 
     x = self.pre_angle_classifier(angle_concat)
-    x = self.angle_classifier(x)
-    op2 = torch.argmax(x, axis=1)
-    op2 = (torch.zeros(len(op2), ANGLE_BIN_COUNT)).to(self.__device).scatter_(1, op2.unsqueeze(1), 1.)
+    op2 = self.angle_classifier(x)
+    #op2 = torch.argmax(x, axis=1)
+    #op2.requires_grad(True)
+    #op2 = (torch.zeros(len(op2), ANGLE_BIN_COUNT, requires_grad=True)).to(self.__device).scatter_(1, op2.unsqueeze(1), 1.)
     # op2 = torch.FloatTensor(N, ANGLE_BIN_COUNT).to(self.__device).scatter_(1,op2, 1)
     x = torch.cat((angle_concat, op2), 1)
     x = self.pre_length_classifier(x)
-    x = self.length_classifier(x)
+    op3 = self.length_classifier(x)
 
-    op3 = torch.argmax(x, axis=1)
-    op3 = (torch.zeros(len(op3), LEN_ACTIONBIN_COUNT)).to(self.__device).scatter_(1, op3.unsqueeze(1), 1.)
+    #op3 = torch.argmax(x, axis=1)
+    #op3.requires_grad(True)
+    # op3 = (torch.zeros(len(op3), LEN_ACTIONBIN_COUNT, requires_grad=True)).to(self.__device).scatter_(1, op3.unsqueeze(1), 1.)
     #op3 = (torch.zeros(len(op3), LEN_ACTIONBIN_COUNT).scatter_(1, op3.unsqueeze(1), 1.)).to(self.__device)
     #op3 = torch.FloatTensor(N, LEN_ACTIONBIN_COUNT).to(self.__device).scatter_(1,op3, 1)
 
@@ -110,7 +115,7 @@ class Net(nn.Module):
     return (op1, op2, op3, forward_output, flatten_input1, flatten_input2)
 
   def inverse_loss(self, outputs, targets):
-    op1, op2, op3, forward_op, latent_image, latent_predicition = outputs
+    op1, op2, op3, forward_op, latent_image1, latent_image2 = outputs
     XY_BIN, THETA, LENGTH = 0, 1, 2
     target1, target2, target3 = targets[:,XY_BIN], targets[:,THETA], targets[:,LENGTH]
     #criterion = nn.CrossEntropyLoss()
@@ -121,7 +126,7 @@ class Net(nn.Module):
     loss2 = criterion(op2.float(), target2.long()) 
     loss3 = criterion(op3.float(), target3.long()) 
     MSEloss = nn.MSELoss()
-    forward_loss = MSEloss(latent_image, latent_predicition) 
+    forward_loss = MSEloss(forward_op, latent_image2) 
     total_loss = loss1 + loss2 + loss3 + self.lamda * forward_loss             
     return total_loss
 
@@ -173,8 +178,8 @@ class Net(nn.Module):
 
 class networkTrainer:
   def __init__(self, partitioned_datasets, EPOCHS=100, BATCH_SIZE=100, experiment_details={}):
-    self.__device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
-    self.__data_device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+    self.__device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    self.__data_device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     params = {'batch_size': BATCH_SIZE,
             'shuffle': True,
@@ -190,6 +195,14 @@ class networkTrainer:
     self.__net.transfer_weigths_from_alexnet()
     self.__net = self.__net.to(self.__device)
     self.__net.lamda = experiment_details['lamda']
+    for params in self.__net.named_parameters():
+    #    params[1].requires_grad = True
+       params[1].retain_grad()
+
+    # for params in self.__net.named_parameters():
+    #    print(params[0])
+    #    print(params[1].requires_grad, params[1].grad)
+      
     #tensor_shape = next(self.train_data_generator)[0][0].shape
     self.sample_data = partitioned_datasets['train'][0]
     tensor_shape = self.sample_data[0].shape
@@ -198,6 +211,7 @@ class networkTrainer:
     self.__NO_OF_CHANNELS = tensor_shape[1]
     self.EPOCHS = EPOCHS
     self.BATCH_SIZE = BATCH_SIZE
+    self.lr = experiment_details['lr']
     self.exp_name = experiment_details['exp_name']
     path_to_write = os.path.join('run', experiment_name)
     self.__writer = SummaryWriter(path_to_write)
@@ -248,6 +262,10 @@ class networkTrainer:
 
 
   def train_network(self):
+
+    # for params in self.__net.named_parameters():
+    #    print(params[0])
+    #    print(params[1].requires_grad, params[1].grad)
   
 
     optimizer = optim.Adam(self.__net.parameters(), lr=0)
@@ -262,35 +280,43 @@ class networkTrainer:
     self.__writer.add_image('baxter_poking_image', img1 * 255.0)
     self.__writer.add_image('baxter_poking_image', img2 * 255.0)
     self.__writer.add_graph(self.__net, (img1.unsqueeze(0), img2.unsqueeze(0), y))
-   # TODO: Find how model with weights can be visualised
-    # self.__writer.add_graph(self.__net, self.__train_x[0,:,:,:,:])
+    # print(summary(self.__net, [tuple(img1.unsqueeze(0).shape), tuple(img2.unsqueeze(0).shape), tuple(y.shape)]))
 
 
 
     index =0
+    self.__net.train()
 
     for epoch in range(self.EPOCHS):
       for batch_x, batch_y in tqdm(self.train_data_generator):
         index += 1
 
-        self.__net.zero_grad()
+        # self.__net.zero_grad()
+        # optimizer.zero_grad()
         batch_x = batch_x.to(self.__device)
         batch_y = batch_y.to(self.__device)
+
 
         batch_x_img1 = batch_x[:,0,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
         batch_x_img2 = batch_x[:,1,:,:,:].reshape(-1,self.__NO_OF_CHANNELS, self.__IMG_HEIGHT, self.__IMG_WIDTH)
 
         outputs = self.__net(batch_x_img1, batch_x_img2, batch_y)
         loss = self.__net.inverse_loss(outputs, batch_y)
+        optimizer.step()
         print(loss)
-        # get_dot = register_hooks(loss)
+
+        #get_dot = register_hooks(loss)
+        #self.__net.retain_grad()
         loss.backward()
-        # dot = get_dot()
-        # dot.save('tmp.dot')
+
+        #for params in self.__net.named_parameters():
+        #  print(params[0])
+        #  print(params[1].requires_grad, params[1].grad)
+
+        #dot = get_dot()
+        #dot.save('tmp.dot')
         # plot_grad_flow(self.__net.named_parameters())
 
-
-        optimizer.step()
 
         batch_accuracy = self.__net.calculate_accuracy(batch_x, batch_y)
 
@@ -300,7 +326,7 @@ class networkTrainer:
         del loss
         del outputs
         if index > 5000:
-          optimizer = optim.Adam(self.__net.parameters(), lr=1e-4)
+          optimizer = optim.Adam(self.__net.parameters(), lr=self.lr)
 
       print('validation')
       self.__plot_accuracy_graphs(dataset_name='val', iter_count=index)
@@ -336,6 +362,7 @@ if __name__=='__main__':
   experiment_name = experiment_name + '_epoch_' + str(no_of_epochs) + '_'+\
                      datetime.now().strftime("%d_%m_%Y_%H:%M:%S")
   lamda = float(sys.argv[4])
+  learning_rate = float(sys.argv[5])
   if seed_no == -1:
     seed_no = random.randint(0, 10000) 
   torch.cuda.manual_seed(seed_no)
@@ -352,15 +379,16 @@ if __name__=='__main__':
   exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("H:%M:%S"),
                  experiment_name, no_of_epochs, seed_no]
 
-  partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train', base_path=base_path)
+  partitioned_datasets['train']  = Dataset(ids['train'][:10000], labels['train'], partition='train', base_path=base_path)
   partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test', base_path=base_path)
   partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val', base_path=base_path)
   experiment_details = {}
   experiment_details['exp_name'] = experiment_name
   experiment_details['lamda'] = lamda
+  experiment_details['lr'] = learning_rate
 
   exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("%H:%M:%S"),
-                 experiment_name, no_of_epochs, seed_no, lamda]
+                 experiment_name, no_of_epochs, seed_no, lamda, learning_rate]
 
   dl_trainer = networkTrainer(partitioned_datasets, EPOCHS=no_of_epochs, experiment_details=experiment_details)
   results = dl_trainer.train_network()
