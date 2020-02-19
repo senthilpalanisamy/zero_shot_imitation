@@ -44,18 +44,18 @@ def visualise_dataset(dataset_generator, write_path):
      image1 = cv2.resize(image1, (IMAGE_WIDTH * scaling_factor, IMAGE_HEIGHT * scaling_factor))
      image2 = cv2.resize(image2, (IMAGE_WIDTH * scaling_factor, IMAGE_HEIGHT * scaling_factor))
   
-     cv2.arrowedLine(image2, point1, point2, (255, 255, 255), scaling_factor)
+     cv2.arrowedLine(image1, point1, point2, (255, 255, 255), scaling_factor)
      # print(image1.shape)
      #cv2.line(image1,(0,0),(150,150),(255,255,255),15)
   
-     final_image = np.concatenate((image2, image1), axis=0)
+     final_image = np.concatenate((image1, image2), axis=0)
      # cv2.imshow('result', final_image)
      # cv2.imshow('image1', image1)
      # cv2.imshow('image2', image2)
      # cv2.waitKey(0)
   
      full_path = os.path.join(train_image_path, str(index)+'.jpeg')
-     cv2.imwrite(full_path, final_image)
+     cv2.imwrite(full_path, final_image * 255)
 
 base_path = '../data/processed_poke_3'
 labels = {}
