@@ -268,7 +268,8 @@ class networkTrainer:
     #    print(params[1].requires_grad, params[1].grad)
   
 
-    optimizer = optim.Adam(self.__net.parameters(), lr=0)
+    # optimizer = optim.Adam(self.__net.parameters(), lr=0)
+    optimizer = optim.Adam(self.__net.parameters(), lr=self.lr)
     X, y  = self.sample_data
     y = y.to(self.__device).float().unsqueeze(0)
     #loss_function = nn.MSELoss()
@@ -302,12 +303,12 @@ class networkTrainer:
 
         outputs = self.__net(batch_x_img1, batch_x_img2, batch_y)
         loss = self.__net.inverse_loss(outputs, batch_y)
+        loss.backward()
         optimizer.step()
         print(loss)
 
         #get_dot = register_hooks(loss)
         #self.__net.retain_grad()
-        loss.backward()
 
         #for params in self.__net.named_parameters():
         #  print(params[0])
@@ -379,7 +380,7 @@ if __name__=='__main__':
   exp_details = [date.today().strftime("%d/%m/%Y"), datetime.now().strftime("H:%M:%S"),
                  experiment_name, no_of_epochs, seed_no]
 
-  partitioned_datasets['train']  = Dataset(ids['train'][:10000], labels['train'], partition='train', base_path=base_path)
+  partitioned_datasets['train']  = Dataset(ids['train'], labels['train'], partition='train', base_path=base_path)
   partitioned_datasets['test']  = Dataset(ids['test'], labels['test'], partition='test', base_path=base_path)
   partitioned_datasets['val'] = Dataset(ids['val'], labels['val'], partition='val', base_path=base_path)
   experiment_details = {}
