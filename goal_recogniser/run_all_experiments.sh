@@ -1,0 +1,12 @@
+python3 goal_recogniser.py goal_recogniser_full_data_2 1000  -1 1e-4
+python3 goal_recogniser.py goal_recogniser_full_data_3 1000  -1 1e-4
+python3 goal_recogniser.py goal_recogniser_full_data_4 1000  -1 1e-5
+python3 goal_recogniser.py goal_recogniser_full_data_5 1000  -1 1e-5
+python3 goal_recogniser.py goal_recogniser_full_data_6 1000  -1 1e-6
+python3 goal_recogniser.py goal_recogniser_full_data_7 1000  -1 1e-6
+python3 goal_recogniser.py goal_recogniser_full_data_8 1000  -1 1e-3
+python3 goal_recogniser.py goal_recogniser_full_data_9 1000  -1 1e-3
+python3 goal_recogniser.py goal_recogniser_full_data_10 1000  -1 1e-2
+python3 goal_recogniser.py goal_recogniser_full_data_11 1000  -1 1e-2
+python3 goal_recogniser.py goal_recogniser_full_data_12 1000  -1 1e-7
+python3 goal_recogniser.py goal_recogniser_full_data_13 1000  -1 1e-7
