@@ -266,7 +266,7 @@ if __name__=='__main__':
   no_of_epochs = int(sys.argv[2])
   seed_no = int(sys.argv[3])
   experiment_name = experiment_name + '_epoch_' + str(no_of_epochs) + '_'+\
-                     datetime.now().strftime("%d_%m_%Y_%H:%M:%S")
+                    datetime.now().strftime("%d_%m_%Y_%H:%M:%S")
   learning_rate = float(sys.argv[4])
   if seed_no == -1:
     seed_no = random.randint(0, 10000) 

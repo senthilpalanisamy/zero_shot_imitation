@@ -307,17 +307,6 @@ class networkTrainer:
         optimizer.step()
         print(loss)
 
-        #get_dot = register_hooks(loss)
-        #self.__net.retain_grad()
-
-        #for params in self.__net.named_parameters():
-        #  print(params[0])
-        #  print(params[1].requires_grad, params[1].grad)
-
-        #dot = get_dot()
-        #dot.save('tmp.dot')
-        # plot_grad_flow(self.__net.named_parameters())
-
 
         batch_accuracy = self.__net.calculate_accuracy(batch_x, batch_y)
 
@@ -336,7 +325,7 @@ class networkTrainer:
 
 
     self.__plot_accuracy_graphs(dataset_name='test', iter_count = index)
-    torch.save(self.__net.state_dict(), os.path.join('./models', self.exp_name + '.pt'))
+    torch.save(self.__net, os.path.join('./models', self.exp_name + '.pt'))
     results = [self.__accuracies['test']['overall'], self.__accuracies['val']['overall'],\
                self.__accuracies['train']['overall'], self.__accuracies['test']['loss'],\
                self.__accuracies['val']['loss'], self.__accuracies['train']['loss'],\
