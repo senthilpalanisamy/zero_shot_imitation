@@ -19,6 +19,4 @@ The pytthon version should be greater than 3.5
    help you set that up. Incase, you find it difficult to enable this or you don't want this logging, you can disable this by commenting out the last few lines
    in the goal recongniser file
 5. An overall workflow of network training is shown below
-<br>
-![workflow](../images/workflow.png)
-<br>
+![Image of workflow](../images/workflow.png)
