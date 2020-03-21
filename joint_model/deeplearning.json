@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "deeplearning-267822",
+  "private_key_id": "05569627dfeba03afa71cc01c5cb4e68112daafd",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDPX0DZT0eKb/ID\nBzfMm39cYwTgrRCmOgepRWWK20sn9P9kJTVKxvcYzBiAq8Xo0GxaYya8Ytk/ixdp\niZh0wDzDx8GCM42Fv3X7iu71jlL7G43ysEAodCyjaE4P4G+4/oZtF/bHjiBHpqAT\nz6bPxySYp0HwMFUgTE6EyhkRosUCXuHBsGUlT9KGqXuRDtS1coeOyn/Y1UYqPvC4\nyKsdQv0qsu5RUwDiCX73q9lKJb4k9Hla3V178Gan/KCtHYlE73/x5yO0yj0syQJb\neT5It0aiS0LDbc7dYu+O1AC36kWtLtc1ZZS3svXoda1ZlzCT+sYDL+dhAXGL6hfs\nQXt3tL0hAgMBAAECgf9mazUsHuvGg+OTe00j0OjmSEFwdglzD9YY1B2CpyxHX8mD\nPJ1FgV8o8CRp6Gymv8nEGpRXFrsVlyzJAxw5DXj1eQMpuyx6kkVDJys+PDzfqIxD\nAKmvUTF6w1lKnh6Pz6W029EWXiuzN6h4IGbS2BhLDNCUQErK2OUu0GHxQ+Lpd+9L\nNsH+EmaTqMStN/tsSHaonExMUGgyJ1LOttWW2Qnu7/gJMlTGRszPH2wrsgFw/NE2\nkLT93oD6c+YDnZUPMYTfSgHVLVgma+1y7kHf9YL0URbt41ShlYO4HqxjWC7ixU0e\n5XNeSaVzhtCnwPvJd9wptAbfIsa9w+hNuRE6bLECgYEA8eI8EO6bGk5ZiOenOzLn\nwClZj7DlGeXKUR5O5jmIptxH4jxsXv3d6UL87ynBjON6mmf4NURuB84Xi2z4mf4y\nGVKMotCuvtejrnQbNjAsVmR1ivC2MnKyGvBNgGQdlzIMZq+dI37HivkiNEnGC1/F\n7WsYQ8R0hccTPCJViusnFfECgYEA23lpV3c1gWDP0ZYR3Eq0g/B9jcM8EGhFgnNM\nDWsD2nuELKhevUiOI4P+S5rGSYdXr7iK90FaI25LEwo1MLm3jDMqqSODSAPfMPyI\nxAdmmNkSwA594v1nA1U8sKbG18ZE3E41oemZg4HEkiEDm9H6l0jfs6hejyJFiYWT\nnqWgKjECgYEAoCANdYQPp52AhjIcsgLkCoEVKhuHvtoxUfwHbT9fKF8hMzKe50+W\nLUpMWSNCXztkOX1kghbX5FDZo1IzTPZLQho0wb/2Pp5QXDe+n+PKJjMA4UayxrjJ\nES5NkBY2xJW8Qeo1036lKGn+67B+656uT5qbCJmwLbN5F1D/YiSDznECgYEAuQLa\nKF9XfV7tEVKeb8OR9H8wd+aSpYogvl0PSWhi8TSaMUMlyg51s767CWTJroYnBvxc\nOR6gK6n4I27Bc/e6oLcpSTeknXqWFSds60MJ2+NxiPEuccEHq6mY5ZlRmeeLeON9\nFqZjQJaN7FlkP2B9DDbkTQCr5aEQWWN/E4evQqECgYEAjVC/IF58pKf/qdUM/6kH\nuDiHjQ1bRzyB/AISK6OgJPFfCL3kCHRgSIDdro/Jp5Ul4/G5SmsZf+GpfgtXr2hT\nMzO6Myt6vRv3rIIdXiNNZLsIN0TSBygN+m8YtXLrqDrlS/UO9nDxlNCxSTUvwUwX\ndnxrrZbl61j4oLbte3CwjIA=\n-----END PRIVATE KEY-----\n",
+  "client_email": "senthil@deeplearning-267822.iam.gserviceaccount.com",
+  "client_id": "108334342174131045449",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/senthil%40deeplearning-267822.iam.gserviceaccount.com"
+}
