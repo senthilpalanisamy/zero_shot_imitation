@@ -20,5 +20,5 @@ The pytthon version should be greater than 3.5
    in the goal recongniser file
 5. An overall workflow of network training is shown below
 <br>
-![workflow](../images/workflow.png)
+![workflow](images/workflow.png)
 <br>
